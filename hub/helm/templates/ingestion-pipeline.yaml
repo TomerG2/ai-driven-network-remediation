@@ -27,9 +27,9 @@ spec:
               protocol: TCP
           env:
             - name: LLAMASTACK_HOST
-              value: "llamastack"
+              value: {{ index .Values "llama-stack" "host" | quote }}
             - name: LLAMASTACK_PORT
-              value: "8321"
+              value: {{ index .Values "llama-stack" "port" | quote }}
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
           livenessProbe:

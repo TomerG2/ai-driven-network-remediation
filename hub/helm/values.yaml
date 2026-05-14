@@ -16,6 +16,8 @@ pgvector:
     port: "5432"
 
 llama-stack:
+  host: llamastack
+  port: "8321"
   replicaCount: 1
   initContainers:
     enabled: true
