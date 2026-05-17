@@ -102,28 +102,30 @@ def send_alert(
 
     payload = {
         "channel": channel,
-        "attachments": [{
-            "color": color,
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {"type": "plain_text", "text": f"NOC Alert: {title}"},
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {"type": "mrkdwn", "text": f"*Severity:* {severity.upper()}"},
-                        {"type": "mrkdwn", "text": f"*Site:* {edge_site}"},
-                        {"type": "mrkdwn", "text": f"*Time:* {timestamp}"},
-                        {"type": "mrkdwn", "text": "*Status:* AI Analyzing..."},
-                    ],
-                },
-                {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": message},
-                },
-            ],
-        }],
+        "attachments": [
+            {
+                "color": color,
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {"type": "plain_text", "text": f"NOC Alert: {title}"},
+                    },
+                    {
+                        "type": "section",
+                        "fields": [
+                            {"type": "mrkdwn", "text": f"*Severity:* {severity.upper()}"},
+                            {"type": "mrkdwn", "text": f"*Site:* {edge_site}"},
+                            {"type": "mrkdwn", "text": f"*Time:* {timestamp}"},
+                            {"type": "mrkdwn", "text": "*Status:* AI Analyzing..."},
+                        ],
+                    },
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": message},
+                    },
+                ],
+            }
+        ],
     }
 
     try:
@@ -174,16 +176,18 @@ def send_remediation(
 
     payload: dict[str, Any] = {
         "channel": channel,
-        "attachments": [{
-            "color": color,
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {"type": "plain_text", "text": f"Remediation: {alert_title}"},
-                },
-                {"type": "section", "fields": fields},
-            ],
-        }],
+        "attachments": [
+            {
+                "color": color,
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {"type": "plain_text", "text": f"Remediation: {alert_title}"},
+                    },
+                    {"type": "section", "fields": fields},
+                ],
+            }
+        ],
     }
     if thread_ts:
         payload["thread_ts"] = thread_ts
@@ -245,7 +249,10 @@ def send_incident_ticket(
         Dict with message timestamp
     """
     priority_label = {
-        "1": "Critical", "2": "High", "3": "Medium", "4": "Low",
+        "1": "Critical",
+        "2": "High",
+        "3": "Medium",
+        "4": "Low",
     }.get(str(priority), "Unknown")
 
     payload = {

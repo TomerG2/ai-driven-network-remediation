@@ -85,12 +85,14 @@ def list_job_templates() -> dict:
 
     templates = []
     for jt in data.get("results", []):
-        templates.append({
-            "id": jt["id"],
-            "name": jt["name"],
-            "description": jt.get("description", ""),
-            "playbook": jt.get("playbook", ""),
-        })
+        templates.append(
+            {
+                "id": jt["id"],
+                "name": jt["name"],
+                "description": jt.get("description", ""),
+                "playbook": jt.get("playbook", ""),
+            }
+        )
 
     return {"success": True, "job_templates": templates, "count": len(templates)}
 

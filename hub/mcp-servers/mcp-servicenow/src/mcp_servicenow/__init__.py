@@ -114,11 +114,14 @@ def _resolve_or_create_caller_sys_id(client: httpx.Client, display_name: str) ->
         return results[0].get("sys_id", "")
 
     user_name = re.sub(r"[^a-z0-9]+", ".", display_name.lower()).strip(".")
-    create_resp = client.post("/table/sys_user", json={
-        "name": display_name,
-        "user_name": user_name or "noc.agent",
-        "active": "true",
-    })
+    create_resp = client.post(
+        "/table/sys_user",
+        json={
+            "name": display_name,
+            "user_name": user_name or "noc.agent",
+            "active": "true",
+        },
+    )
     create_resp.raise_for_status()
     return create_resp.json().get("result", {}).get("sys_id", "")
 
@@ -153,7 +156,9 @@ def _notify_slack_ticket_created(ticket: dict) -> dict:
 
     try:
         with httpx.Client(timeout=12) as http:
-            resp = http.post(f"{SLACK_BASE_URL}/chat.postMessage", json={"channel": SLACK_NOC_CHANNEL, "text": text}, headers=headers)
+            resp = http.post(
+                f"{SLACK_BASE_URL}/chat.postMessage", json={"channel": SLACK_NOC_CHANNEL, "text": text}, headers=headers
+            )
             data = resp.json()
         if not data.get("ok", False):
             return {"sent": False, "reason": data.get("error", "unknown_error")}

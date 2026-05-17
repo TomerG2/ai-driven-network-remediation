@@ -90,13 +90,16 @@ def query_logs(
         start_ns = end_ns - _parse_duration_ns(duration)
 
         with _loki_client() as client:
-            resp = client.get("/query_range", params={
-                "query": logql_query,
-                "start": start_ns,
-                "end": end_ns,
-                "limit": limit,
-                "direction": "backward",
-            })
+            resp = client.get(
+                "/query_range",
+                params={
+                    "query": logql_query,
+                    "start": start_ns,
+                    "end": end_ns,
+                    "limit": limit,
+                    "direction": "backward",
+                },
+            )
             resp.raise_for_status()
             data = resp.json()
 
@@ -105,13 +108,13 @@ def query_logs(
         for stream in results:
             labels = stream.get("stream", {})
             for ts_val, line in stream.get("values", []):
-                log_lines.append({
-                    "timestamp": datetime.fromtimestamp(
-                        int(ts_val) / 1_000_000_000, tz=timezone.utc
-                    ).isoformat(),
-                    "line": line,
-                    "labels": labels,
-                })
+                log_lines.append(
+                    {
+                        "timestamp": datetime.fromtimestamp(int(ts_val) / 1_000_000_000, tz=timezone.utc).isoformat(),
+                        "line": line,
+                        "labels": labels,
+                    }
+                )
 
         log_lines.sort(key=lambda x: x["timestamp"], reverse=True)
 
@@ -175,12 +178,15 @@ def count_errors(
         metric_query = f'sum(count_over_time({{namespace="{namespace}", app="{app}"}} |= "error" [5m]))'
 
         with _loki_client() as client:
-            resp = client.get("/query_range", params={
-                "query": metric_query,
-                "start": start_ns,
-                "end": end_ns,
-                "step": "300",
-            })
+            resp = client.get(
+                "/query_range",
+                params={
+                    "query": metric_query,
+                    "start": start_ns,
+                    "end": end_ns,
+                    "step": "300",
+                },
+            )
             resp.raise_for_status()
             data = resp.json()
 
@@ -188,10 +194,12 @@ def count_errors(
         buckets = []
         for series in results:
             for ts_val, count in series.get("values", []):
-                buckets.append({
-                    "time": datetime.fromtimestamp(int(ts_val), tz=timezone.utc).isoformat(),
-                    "error_count": int(float(count)),
-                })
+                buckets.append(
+                    {
+                        "time": datetime.fromtimestamp(int(ts_val), tz=timezone.utc).isoformat(),
+                        "error_count": int(float(count)),
+                    }
+                )
 
         total = sum(b["error_count"] for b in buckets)
         return {

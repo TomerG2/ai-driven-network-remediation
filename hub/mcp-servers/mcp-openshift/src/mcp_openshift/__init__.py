@@ -92,13 +92,15 @@ def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
             containers = pod["status"].get("containerStatuses", [])
             restarts = sum(c.get("restartCount", 0) for c in containers)
             node = pod["spec"].get("nodeName", "unknown")
-            pods.append({
-                "name": name,
-                "status": phase,
-                "restart_count": restarts,
-                "node": node,
-                "ready": all(c.get("ready", False) for c in containers),
-            })
+            pods.append(
+                {
+                    "name": name,
+                    "status": phase,
+                    "restart_count": restarts,
+                    "node": node,
+                    "ready": all(c.get("ready", False) for c in containers),
+                }
+            )
         return {"namespace": namespace, "pods": pods, "count": len(pods)}
     except json.JSONDecodeError as e:
         return {"error": f"Failed to parse pod output: {e}", "pods": []}
@@ -125,14 +127,16 @@ def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
         data = json.loads(result["stdout"])
         events = []
         for evt in data.get("items", [])[-limit:]:
-            events.append({
-                "type": evt.get("type", "Normal"),
-                "reason": evt.get("reason", ""),
-                "message": evt.get("message", ""),
-                "object": f"{evt['involvedObject']['kind']}/{evt['involvedObject']['name']}",
-                "time": evt.get("lastTimestamp", ""),
-                "count": evt.get("count", 1),
-            })
+            events.append(
+                {
+                    "type": evt.get("type", "Normal"),
+                    "reason": evt.get("reason", ""),
+                    "message": evt.get("message", ""),
+                    "object": f"{evt['involvedObject']['kind']}/{evt['involvedObject']['name']}",
+                    "time": evt.get("lastTimestamp", ""),
+                    "count": evt.get("count", 1),
+                }
+            )
         events.sort(key=lambda e: (0 if e["type"] == "Warning" else 1, e["time"]))
         return {"namespace": namespace, "events": events}
     except json.JSONDecodeError as e:
@@ -156,9 +160,16 @@ def rollout_restart(deployment: str, namespace: str = DEFAULT_NAMESPACE) -> dict
     if not result["success"]:
         return {"success": False, "error": result["stderr"]}
 
-    wait_result = _run_oc([
-        "rollout", "status", f"deployment/{deployment}", "-n", namespace, "--timeout=90s",
-    ])
+    wait_result = _run_oc(
+        [
+            "rollout",
+            "status",
+            f"deployment/{deployment}",
+            "-n",
+            namespace,
+            "--timeout=90s",
+        ]
+    )
 
     return {
         "success": wait_result["success"],
@@ -185,15 +196,27 @@ def patch_deployment_memory(
     Returns:
         Dict with patch status
     """
-    patch = json.dumps([{
-        "op": "replace",
-        "path": "/spec/template/spec/containers/0/resources/limits/memory",
-        "value": memory_limit,
-    }])
+    patch = json.dumps(
+        [
+            {
+                "op": "replace",
+                "path": "/spec/template/spec/containers/0/resources/limits/memory",
+                "value": memory_limit,
+            }
+        ]
+    )
 
-    result = _run_oc([
-        "patch", "deployment", deployment, "-n", namespace, "--type=json", f"-p={patch}",
-    ])
+    result = _run_oc(
+        [
+            "patch",
+            "deployment",
+            deployment,
+            "-n",
+            namespace,
+            "--type=json",
+            f"-p={patch}",
+        ]
+    )
 
     return {
         "success": result["success"],

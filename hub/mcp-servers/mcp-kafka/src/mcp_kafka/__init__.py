@@ -42,9 +42,7 @@ mcp = FastMCP(
     stateless_http=(MCP_TRANSPORT == "streamable-http"),
 )
 
-KAFKA_BOOTSTRAP = os.getenv(
-    "KAFKA_BOOTSTRAP", "dark-noc-kafka-kafka-bootstrap.dark-noc-kafka.svc:9092"
-)
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "dark-noc-kafka-kafka-bootstrap.dark-noc-kafka.svc:9092")
 
 
 @mcp.custom_route("/health", methods=["GET"])  # type: ignore
@@ -95,14 +93,14 @@ def consume_topic(
             except json.JSONDecodeError:
                 value = msg.value
 
-            messages.append({
-                "partition": msg.partition,
-                "offset": msg.offset,
-                "timestamp": datetime.fromtimestamp(
-                    msg.timestamp / 1000, tz=timezone.utc
-                ).isoformat(),
-                "value": value,
-            })
+            messages.append(
+                {
+                    "partition": msg.partition,
+                    "offset": msg.offset,
+                    "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
+                    "value": value,
+                }
+            )
 
             if len(messages) >= max_messages:
                 break
@@ -174,10 +172,7 @@ def get_consumer_lag(
     )
 
     try:
-        tp_list = [
-            TopicPartition(topic, p)
-            for p in consumer.partitions_for_topic(topic) or [0]
-        ]
+        tp_list = [TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic) or [0]]
 
         end_offsets = consumer.end_offsets(tp_list)
         committed = {tp: consumer.committed(tp) for tp in tp_list}
@@ -189,12 +184,14 @@ def get_consumer_lag(
             committed_offset = committed[tp] or 0
             lag = max(0, end - committed_offset)
             total_lag += lag
-            partitions.append({
-                "partition": tp.partition,
-                "end_offset": end,
-                "committed_offset": committed_offset,
-                "lag": lag,
-            })
+            partitions.append(
+                {
+                    "partition": tp.partition,
+                    "end_offset": end,
+                    "committed_offset": committed_offset,
+                    "lag": lag,
+                }
+            )
     finally:
         consumer.close()
 
