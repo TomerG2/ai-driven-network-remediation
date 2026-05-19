@@ -1,5 +1,8 @@
 from unittest.mock import patch
 
+from click.testing import CliRunner
+
+from agent_service import main
 from agent_service.graph import build_graph
 from agent_service.models import GraphConfig, RootCauseAnalysis
 
@@ -81,3 +84,37 @@ class TestConditionalRouting:
             result = graph.invoke({"raw_event": "test event"})
 
         assert result["decision"] == "request_approval"
+
+
+class TestConfidenceOverride:
+    def test_confidence_override_controls_routing(self):
+        graph = build_graph()
+        result = graph.invoke(
+            {"raw_event": "test event", "confidence_override": 0.5}
+        )
+
+        assert result["root_cause_analysis"].confidence == 0.5
+        assert result["decision"] == "escalate"
+
+
+class TestCli:
+    def test_default_confidence_routes_to_execute(self):
+        runner = CliRunner()
+        result = runner.invoke(main)
+
+        assert result.exit_code == 0
+        assert "'decision': 'execute'" in result.output
+
+    def test_low_confidence_routes_to_escalate(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--confidence", "0.5"])
+
+        assert result.exit_code == 0
+        assert "'decision': 'escalate'" in result.output
+
+    def test_mid_confidence_routes_to_request_approval(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--confidence", "0.75"])
+
+        assert result.exit_code == 0
+        assert "'decision': 'request_approval'" in result.output

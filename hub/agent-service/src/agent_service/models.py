@@ -17,6 +17,7 @@ class GraphConfig(BaseModel):
 
 class RemediationState(BaseModel):
     raw_event: str
+    confidence_override: float | None = None
     context_snippets: list[str] = []
     root_cause_analysis: RootCauseAnalysis | None = None
     decision: str = ""
