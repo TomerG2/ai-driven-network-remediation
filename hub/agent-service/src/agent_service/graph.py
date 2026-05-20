@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Optional
+
 from langgraph.graph import END, START, StateGraph
 
 from agent_service.models import GraphConfig, RemediationState
@@ -17,7 +20,7 @@ def _route_after_decide(state: RemediationState) -> str:
     return state.decision
 
 
-def build_graph(config: GraphConfig | None = None):
+def build_graph(config: Optional[GraphConfig] = None):
     if config is None:
         config = GraphConfig()
 
@@ -47,3 +50,10 @@ def build_graph(config: GraphConfig | None = None):
     graph.add_edge("notify", END)
 
     return graph.compile()
+
+
+def draw_graph(output: Path, config: Optional[GraphConfig] = None) -> None:
+    compiled = build_graph(config)
+    png_bytes = compiled.get_graph().draw_mermaid_png()
+    output.write_bytes(png_bytes)
+
