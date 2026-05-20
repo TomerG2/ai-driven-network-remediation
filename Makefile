@@ -12,6 +12,7 @@ INGESTION_IMG  := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
+ENABLE_LOKISTACK       ?=
 LANGFUSE_RELEASE       := langfuse
 LANGFUSE_CHART_REPO    := langfuse
 LANGFUSE_CHART_URL     := https://langfuse.github.io/langfuse-k8s
@@ -66,6 +67,9 @@ helm-install: namespace helm-depend
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
 endif
+ifeq ($(ENABLE_LOKISTACK),true)
+	$(MAKE) lokistack-install
+endif
 ifeq ($(ENABLE_KAFKA),true)
 	$(MAKE) kafka-install
 endif
@@ -74,6 +78,9 @@ endif
 helm-uninstall:
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 ifeq ($(ENABLE_LANGFUSE),true)
+	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
+	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
+	oc delete secret langfuse-secrets --namespace $(NAMESPACE) || true
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete secret langfuse-secrets --namespace $(NAMESPACE) --ignore-not-found
@@ -92,6 +99,81 @@ _langfuse-deploy:
 		--values $(LANGFUSE_VALUES) \
 		--version $(LANGFUSE_CHART_VERSION) \
 		--wait --timeout 10m
+
+# ── LokiStack ───────────────────────────────────────────────────
+LOKISTACK_RELEASE := lokistack
+LOKISTACK_CHART   := hub/infra/lokistack/chart
+LOKISTACK_NS      ?= $(NAMESPACE)
+LOKISTACK_NAME    ?= logging-loki
+LOKISTACK_EXTRA   ?=
+
+.PHONY: _check-loki-operator
+_check-loki-operator:
+	@oc get csv -A 2>/dev/null | grep -q "loki-operator" || \
+		{ echo ""; \
+		  echo "ERROR: Loki Operator is not installed on this cluster."; \
+		  echo ""; \
+		  echo "The LokiStack requires the Loki Operator to be installed first."; \
+		  echo ""; \
+		  echo "To install the Loki Operator:"; \
+		  echo "  1. In the OpenShift web console, navigate to:"; \
+		  echo "     Operators → OperatorHub"; \
+		  echo "  2. Search for 'Loki Operator'"; \
+		  echo "  3. Select 'Loki Operator' (provided by Red Hat)"; \
+		  echo "  4. Click 'Install' and follow the installation wizard"; \
+		  echo "  5. Choose installation mode (all namespaces recommended)"; \
+		  echo "  6. Wait for the operator to become ready"; \
+		  echo ""; \
+		  exit 1; }
+
+.PHONY: _check-minio
+_check-minio:
+	@oc get statefulset minio -n $(LOKISTACK_NS) -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -qE '^[1-9]' || \
+		{ echo "ERROR: MinIO is not running in namespace '$(LOKISTACK_NS)'. Run 'make helm-install' first."; exit 1; }
+
+.PHONY: lokistack-install
+lokistack-install: _check-loki-operator _check-minio
+	helm upgrade --install $(LOKISTACK_RELEASE) $(LOKISTACK_CHART) \
+		--namespace $(LOKISTACK_NS) \
+		$(LOKISTACK_EXTRA) \
+		--wait --timeout 15m
+
+.PHONY: lokistack-uninstall
+lokistack-uninstall:
+	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NS) --ignore-not-found
+	oc delete pvc -n $(LOKISTACK_NS) -l app.kubernetes.io/instance=$(LOKISTACK_NAME) --ignore-not-found
+	oc exec -n $(LOKISTACK_NS) statefulset/minio -- sh -c \
+		'mc alias set local http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc rb --force local/loki' || true
+
+.PHONY: lokistack-status
+lokistack-status:
+	@echo "=== LokiStack ==="
+	oc get lokistack -n $(LOKISTACK_NS) 2>/dev/null || echo "(none)"
+	@echo ""
+	@echo "=== Loki Bucket Job ==="
+	oc get jobs minio-bucket-create -n $(LOKISTACK_NS) 2>/dev/null || echo "(none)"
+	@echo ""
+	@echo "=== Grafana ==="
+	oc get pods -l app=grafana -n $(LOKISTACK_NS)
+	@echo ""
+	@echo "=== Grafana Route ==="
+	oc get route grafana -n $(LOKISTACK_NS) -o jsonpath='{.spec.host}' 2>/dev/null && echo "" || echo "(none)"
+
+.PHONY: minio-install
+minio-install: namespace
+	helm upgrade --install minio hub/helm/charts/minio \
+		--namespace $(NAMESPACE) \
+		--set global.routes.enabled=$(ROUTES_ENABLED) \
+		--wait --timeout 10m
+
+.PHONY: minio-uninstall
+minio-uninstall:
+	@echo "Uninstalling hub MinIO (this will affect all services using it)..."
+	oc delete statefulset minio --namespace $(NAMESPACE) --ignore-not-found
+	oc delete service minio --namespace $(NAMESPACE) --ignore-not-found
+	oc delete secret minio --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
+	oc delete route minio-api minio-webui --namespace $(NAMESPACE) --ignore-not-found
 
 .PHONY: integration-tests
 integration-tests:

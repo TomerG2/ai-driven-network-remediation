@@ -1,0 +1,166 @@
+# LokiStack Helm Chart - Default Values
+#
+# Prerequisites:
+#   - Loki Operator must be installed (via OLM or manually) before deploying this chart
+#   - An OperatorGroup must exist in the target namespace
+#
+# Usage: helm install lokistack ./chart -n <namespace>
+#
+# By default, LokiStack reuses the hub MinIO instance (deployed by the main hub chart).
+# Override minio.endpoint and minio.credentials for external S3.
+#
+# Environment overrides (use --set):
+#   External S3: --set minio.endpoint=https://s3.us-east-1.amazonaws.com
+#                --set minio.bucketName=production-loki-logs
+#                --set lokistack.size=1x.medium
+#                --set grafana.replicas=2
+
+# Cluster apps domain (auto-discovered on OpenShift, set manually for helm template or non-OpenShift)
+clusterDomain: ""
+
+# MinIO / S3 storage configuration
+# Default: reuse the hub MinIO deployed by the main chart
+minio:
+  endpoint: "http://minio:9000"
+  bucketName: loki
+  region: us-east-1
+  existingSecret:
+    name: minio
+    userKey: user
+    passwordKey: password
+  bucketJobImage:
+    repository: quay.io/minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# LokiStack configuration
+lokistack:
+  name: logging-loki
+  # Options: 1x.extra-small (dev), 1x.small, 1x.medium (production)
+  size: 1x.extra-small
+
+  # Replication factor for log streams
+  # Set to 1 for dev/test environments with limited cluster resources
+  # Set to 2+ for production HA
+  replication:
+    factor: 1
+
+  # Component-level replica overrides
+  # Reduces resource requirements for dev/test environments
+  # All components set to 1 replica (no HA) for minimal resource usage
+  template:
+    distributor:
+      replicas: 1
+    gateway:
+      replicas: 1
+    indexGateway:
+      replicas: 1
+    ingester:
+      replicas: 1
+    querier:
+      replicas: 1
+    queryFrontend:
+      replicas: 1
+
+  storage:
+    secret:
+      name: logging-loki-s3
+      type: s3
+
+    schemas:
+      - version: v13
+        effectiveDate: "2024-01-01"
+
+    storageClassName: gp3-csi
+
+  tenants:
+    mode: openshift-logging
+
+  limits:
+    global:
+      ingestion:
+        ingestionRate: 50
+        ingestionBurstSize: 50
+      queries:
+        queryTimeout: 3m
+        maxVolumeSeries: 1000
+
+# Grafana configuration
+grafana:
+  enabled: true
+  # Set replicas: 2 for production HA
+  replicas: 1
+
+  image:
+    repository: grafana/grafana
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Grafana web UI login credentials
+  adminUser: admin
+  adminPassword: admin
+
+  auth:
+    anonymous:
+      enabled: false
+      orgRole: Viewer
+
+  # Loki datasources — authenticated via grafana-loki-reader service account token
+  # URLs are auto-constructed from lokistack.name and the release namespace
+  datasources:
+    loki:
+      application:
+        enabled: true
+        name: Loki-Application
+        isDefault: true
+        tlsSkipVerify: true
+
+      infrastructure:
+        enabled: true
+        name: Loki-Infrastructure
+        isDefault: false
+        tlsSkipVerify: true
+
+      audit:
+        enabled: false
+        name: Loki-Audit
+        isDefault: false
+        tlsSkipVerify: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations:
+      service.alpha.openshift.io/serving-cert-secret-name: grafana-tls
+
+  route:
+    enabled: true
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+  # RBAC for Grafana backend to query LokiStack API (separate from UI login above)
+  # These resources are always created when Grafana is enabled (required for LokiStack auth)
+  rbac:
+    serviceAccount:
+      name: grafana
+    # ServiceAccount used to authenticate datasource requests to LokiStack
+    lokiReader:
+      serviceAccountName: grafana-loki-reader
+
+# Test log generator (enable for dev/testing)
+testLogGenerator:
+  enabled: false
+  replicas: 1
+  image:
+    repository: busybox
+    tag: latest
+  interval: 5

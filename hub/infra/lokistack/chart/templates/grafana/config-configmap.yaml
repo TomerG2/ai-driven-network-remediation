@@ -1,0 +1,28 @@
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: {{ include "lokistack.namespace" . }}
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "grafana") | nindent 4 }}
+data:
+  grafana.ini: |
+    [server]
+    root_url = https://{{ include "grafana.route.host" . }}
+
+    {{- if .Values.grafana.auth.anonymous.enabled }}
+    [auth.anonymous]
+    enabled = {{ .Values.grafana.auth.anonymous.enabled }}
+    org_role = {{ .Values.grafana.auth.anonymous.orgRole }}
+    {{- end }}
+
+    [users]
+    auto_assign_org_role = Admin
+
+    [security]
+    admin_user = {{ .Values.grafana.adminUser }}
+    admin_password = {{ .Values.grafana.adminPassword }}
+
+{{- end }}
