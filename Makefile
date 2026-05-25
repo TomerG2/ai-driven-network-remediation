@@ -38,6 +38,14 @@ KAFKA_VALUES           := hub/infra/kafka/values.yaml
 KAFKA_PORT             := 9092
 KAFKA_HELM_EXTRA_ARGS  ?=
 
+ADNR_LLM_ENABLED := $(and $(ADNR_LLM_ID),$(ADNR_LLM_URL),$(ADNR_LLM_TOKEN))
+
+helm_adnr_llm_args = \
+	$(if $(ADNR_LLM_ENABLED),--set llama-stack.models.adnr-llm.enabled=true,) \
+	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.id='$(ADNR_LLM_ID)',) \
+	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.url='$(ADNR_LLM_URL)',) \
+	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)',)
+
 .PHONY: build-all-images
 build-all-images: build-chatbot-image build-mcp-images
 
@@ -101,6 +109,7 @@ helm-install: namespace helm-depend
 		--set mcp-servers.mcp-servers.noc-slack.image.tag=$(VERSION) \
 		--set mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
 		--set mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION) \
+		$(helm_adnr_llm_args) \
 		$(HELM_EXTRA_ARGS) \
 		--wait --timeout 30m
 ifeq ($(ENABLE_LANGFUSE),true)
