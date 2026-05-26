@@ -16,22 +16,9 @@ Transport: Configurable via MCP_TRANSPORT env var (default: sse)
 
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
 from starlette.responses import JSONResponse
 
-from .config import MCP_HOST, MCP_PORT, MCP_TRANSPORT
-
-mcp = FastMCP(
-    "noc-aap",
-    instructions=(
-        "Ansible Automation Platform tools for triggering remediation playbooks. "
-        "Use launch_job to execute Ansible playbooks on the edge cluster. "
-        "Always check get_job_status after launching — don't assume success."
-    ),
-    host=MCP_HOST,
-    port=MCP_PORT,
-    stateless_http=(MCP_TRANSPORT == "streamable-http"),
-)
+from .config import MCP_TRANSPORT, mcp
 
 
 @mcp.custom_route("/health", methods=["GET"])  # type: ignore

@@ -14,32 +14,11 @@ Tools:
 Transport: Configurable via MCP_TRANSPORT env var (default: sse)
 """
 
-import os
-from typing import Any, Literal
+from typing import Any
 
-from mcp.server.fastmcp import FastMCP
 from starlette.responses import JSONResponse
 
-MCP_TRANSPORT: Literal["stdio", "sse", "streamable-http"] = os.environ.get(
-    "MCP_TRANSPORT", "sse"
-)  # type: ignore[assignment]
-MCP_PORT = int(os.environ.get("MCP_PORT", "8001"))
-MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
-
-mcp = FastMCP(
-    "noc-openshift",
-    instructions=(
-        "OpenShift cluster management tools for the NOC remediation agent. "
-        "Use these tools to inspect pod status, get logs, patch deployments, "
-        "and trigger restarts on the edge cluster."
-    ),
-    host=MCP_HOST,
-    port=MCP_PORT,
-    stateless_http=(MCP_TRANSPORT == "streamable-http"),
-)
-
-EDGE_KUBECONFIG = os.getenv("EDGE_KUBECONFIG", "/kubeconfig/edge-kubeconfig")
-DEFAULT_NAMESPACE = os.getenv("DEFAULT_NAMESPACE", "dark-noc-edge")
+from .config import MCP_TRANSPORT, mcp
 
 
 @mcp.custom_route("/health", methods=["GET"])  # type: ignore

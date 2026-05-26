@@ -14,23 +14,9 @@ Transport: Configurable via MCP_TRANSPORT env var (default: sse)
 
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
 from starlette.responses import JSONResponse
 
-from .config import MCP_HOST, MCP_PORT, MCP_TRANSPORT
-
-mcp = FastMCP(
-    "noc-lokistack",
-    instructions=(
-        "LokiStack log query tools using LogQL. "
-        "Use get_recent_errors for quick error lookups. "
-        "Use query_logs for complex LogQL queries. "
-        "Time range: use relative durations like '1h', '30m', '7d'."
-    ),
-    host=MCP_HOST,
-    port=MCP_PORT,
-    stateless_http=(MCP_TRANSPORT == "streamable-http"),
-)
+from .config import MCP_TRANSPORT, mcp
 
 
 @mcp.custom_route("/health", methods=["GET"])  # type: ignore

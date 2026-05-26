@@ -4,8 +4,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .config import DEFAULT_NAMESPACE, LOKI_TOKEN, LOKI_URL
-from .server import mcp
+from .config import DEFAULT_NAMESPACE, LOKI_TOKEN, LOKI_URL, mcp
 
 _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 

@@ -5,8 +5,7 @@ from typing import Any
 
 import httpx
 
-from .config import SLACK_BASE_URL, SLACK_BOT_TOKEN, SLACK_NOC_CHANNEL
-from .server import mcp
+from .config import SLACK_BASE_URL, SLACK_BOT_TOKEN, SLACK_NOC_CHANNEL, mcp
 
 _SEVERITY_COLORS = {
     "critical": "#FF0000",

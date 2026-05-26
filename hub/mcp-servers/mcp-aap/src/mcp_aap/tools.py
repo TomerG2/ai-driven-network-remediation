@@ -4,8 +4,7 @@ import json
 
 import httpx
 
-from .config import AAP_API_PREFIX, AAP_PASSWORD, AAP_URL, AAP_USERNAME, AAP_VERIFY_SSL
-from .server import mcp
+from .config import AAP_API_PREFIX, AAP_PASSWORD, AAP_URL, AAP_USERNAME, AAP_VERIFY_SSL, mcp
 
 
 def _aap_client() -> httpx.Client:

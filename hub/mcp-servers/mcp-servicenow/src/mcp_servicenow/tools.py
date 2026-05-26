@@ -15,8 +15,8 @@ from .config import (
     SNOW_PASSWORD,
     SNOW_URL,
     SNOW_USERNAME,
+    mcp,
 )
-from .server import mcp
 
 
 def _is_real_servicenow() -> bool:

@@ -3,7 +3,7 @@
 import json
 import subprocess
 
-from .server import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp
+from .config import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp
 
 
 def _run_oc(args: list[str], kubeconfig: str = EDGE_KUBECONFIG) -> dict:

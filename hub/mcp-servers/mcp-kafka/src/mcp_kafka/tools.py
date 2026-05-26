@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.structs import TopicPartition
 
-from .server import KAFKA_BOOTSTRAP, mcp
+from .config import KAFKA_BOOTSTRAP, mcp
 
 
 @mcp.tool()
