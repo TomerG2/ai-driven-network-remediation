@@ -16,8 +16,9 @@ MCP_AAP_IMG        := $(REGISTRY)/noc-mcp-aap:$(VERSION)
 MCP_SLACK_IMG      := $(REGISTRY)/noc-mcp-slack:$(VERSION)
 MCP_SERVICENOW_IMG := $(REGISTRY)/noc-mcp-servicenow:$(VERSION)
 
-MCP_CONTAINERFILE  := hub/mcp-servers/Containerfile
-MCP_CONTEXT        := hub/mcp-servers
+MCP_CONTAINERFILE           := hub/mcp-servers/Containerfile
+MCP_OPENSHIFT_CONTAINERFILE := hub/mcp-servers/Containerfile.openshift
+MCP_CONTEXT                 := hub/mcp-servers
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -70,7 +71,7 @@ build-chatbot-image:
 
 .PHONY: build-mcp-images
 build-mcp-images:
-	$(CONTAINER_TOOL) build -t $(MCP_OPENSHIFT_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-openshift  --build-arg MODULE_NAME=mcp_openshift  -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
+	$(CONTAINER_TOOL) build -t $(MCP_OPENSHIFT_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-openshift  --build-arg MODULE_NAME=mcp_openshift  -f $(MCP_OPENSHIFT_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_LOKISTACK_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-lokistack  --build-arg MODULE_NAME=mcp_lokistack  -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_KAFKA_IMG)      --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-kafka      --build-arg MODULE_NAME=mcp_kafka      -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_AAP_IMG)        --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-aap        --build-arg MODULE_NAME=mcp_aap        -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
@@ -229,6 +230,7 @@ minio-uninstall:
 .PHONY: unit-tests
 unit-tests:
 	cd hub/agent-service && uv run pytest
+	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest
 
 .PHONY: integration-tests
 integration-tests:

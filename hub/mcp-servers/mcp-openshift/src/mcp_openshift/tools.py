@@ -5,12 +5,18 @@ import subprocess
 
 from .config import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp
 
+KUBECTL_TIMEOUT = 30
 
-def _run_oc(args: list[str], kubeconfig: str = EDGE_KUBECONFIG) -> dict:
-    """Run an oc/kubectl command and return parsed output."""
+
+def _run_kubectl(
+    args: list[str],
+    kubeconfig: str = EDGE_KUBECONFIG,
+    timeout: int = KUBECTL_TIMEOUT,
+) -> dict:
+    """Run a kubectl command and return parsed output."""
     cmd = ["kubectl", f"--kubeconfig={kubeconfig}"] + args
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return {
             "stdout": result.stdout,
             "stderr": result.stderr,
@@ -18,9 +24,37 @@ def _run_oc(args: list[str], kubeconfig: str = EDGE_KUBECONFIG) -> dict:
             "success": result.returncode == 0,
         }
     except subprocess.TimeoutExpired:
-        return {"stdout": "", "stderr": "Command timed out after 30s", "returncode": -1, "success": False}
+        return {"stdout": "", "stderr": f"Command timed out after {timeout}s", "returncode": -1, "success": False}
     except Exception as e:
         return {"stdout": "", "stderr": str(e), "returncode": -1, "success": False}
+
+
+@mcp.tool()
+def get_namespaces() -> dict:
+    """
+    List all namespaces on the cluster with their status.
+
+    Returns:
+        Dict with namespaces list: [{name, status}]
+    """
+    result = _run_kubectl(["get", "namespaces", "-o", "json"])
+
+    if not result["success"]:
+        return {"error": result["stderr"], "namespaces": []}
+
+    try:
+        data = json.loads(result["stdout"])
+        namespaces = []
+        for ns in data.get("items", []):
+            namespaces.append(
+                {
+                    "name": ns["metadata"]["name"],
+                    "status": ns["status"].get("phase", "Unknown"),
+                }
+            )
+        return {"namespaces": namespaces, "count": len(namespaces)}
+    except json.JSONDecodeError as e:
+        return {"error": f"Failed to parse namespace output: {e}", "namespaces": []}
 
 
 @mcp.tool()
@@ -29,12 +63,12 @@ def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
     List all pods in the specified namespace with their status.
 
     Args:
-        namespace: Kubernetes namespace to query (default: dark-noc-edge)
+        namespace: OpenShift namespace to query (default: dark-noc-edge)
 
     Returns:
         Dict with pods list: [{name, status, restart_count, node, ready}]
     """
-    result = _run_oc(["get", "pods", "-n", namespace, "-o", "json"])
+    result = _run_kubectl(["get", "pods", "-n", namespace, "-o", "json"])
 
     if not result["success"]:
         return {"error": result["stderr"], "pods": []}
@@ -65,16 +99,16 @@ def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
 @mcp.tool()
 def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
     """
-    Get recent Kubernetes events (especially warnings) from a namespace.
+    Get recent OpenShift events (especially warnings) from a namespace.
 
     Args:
-        namespace: Kubernetes namespace (default: dark-noc-edge)
+        namespace: OpenShift namespace (default: dark-noc-edge)
         limit:     Maximum number of events to return (default: 20)
 
     Returns:
         Dict with events list: [{type, reason, message, object, time, count}]
     """
-    result = _run_oc(["get", "events", "-n", namespace, "--sort-by=lastTimestamp", "-o", "json"])
+    result = _run_kubectl(["get", "events", "-n", namespace, "--sort-by=lastTimestamp", "-o", "json"])
 
     if not result["success"]:
         return {"error": result["stderr"], "events": []}
@@ -89,11 +123,11 @@ def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
                     "reason": evt.get("reason", ""),
                     "message": evt.get("message", ""),
                     "object": f"{evt['involvedObject']['kind']}/{evt['involvedObject']['name']}",
-                    "time": evt.get("lastTimestamp", ""),
+                    "time": evt.get("lastTimestamp") or evt.get("eventTime") or "",
                     "count": evt.get("count", 1),
                 }
             )
-        events.sort(key=lambda e: (0 if e["type"] == "Warning" else 1, e["time"]))
+        events.sort(key=lambda e: (0 if e["type"] == "Warning" else 1, e["time"] or ""))
         return {"namespace": namespace, "events": events}
     except json.JSONDecodeError as e:
         return {"error": f"Failed to parse events: {e}", "events": []}
@@ -111,12 +145,12 @@ def rollout_restart(deployment: str, namespace: str = DEFAULT_NAMESPACE) -> dict
     Returns:
         Dict with restart status and message
     """
-    result = _run_oc(["rollout", "restart", f"deployment/{deployment}", "-n", namespace])
+    result = _run_kubectl(["rollout", "restart", f"deployment/{deployment}", "-n", namespace])
 
     if not result["success"]:
         return {"success": False, "error": result["stderr"]}
 
-    wait_result = _run_oc(
+    wait_result = _run_kubectl(
         [
             "rollout",
             "status",
@@ -124,7 +158,8 @@ def rollout_restart(deployment: str, namespace: str = DEFAULT_NAMESPACE) -> dict
             "-n",
             namespace,
             "--timeout=90s",
-        ]
+        ],
+        timeout=120,
     )
 
     return {
@@ -162,7 +197,7 @@ def patch_deployment_memory(
         ]
     )
 
-    result = _run_oc(
+    result = _run_kubectl(
         [
             "patch",
             "deployment",
@@ -205,7 +240,7 @@ def get_pod_logs(
     if container:
         args += ["-c", container]
 
-    result = _run_oc(args)
+    result = _run_kubectl(args)
     return {
         "pod": pod_name,
         "namespace": namespace,
