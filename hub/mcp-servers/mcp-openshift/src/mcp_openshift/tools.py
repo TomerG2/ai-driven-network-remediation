@@ -5,16 +5,16 @@ import subprocess
 
 from .config import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp
 
-KUBECTL_TIMEOUT = 30
+OC_TIMEOUT = 30
 
 
-def _run_kubectl(
+def _run_oc(
     args: list[str],
     kubeconfig: str = EDGE_KUBECONFIG,
-    timeout: int = KUBECTL_TIMEOUT,
+    timeout: int = OC_TIMEOUT,
 ) -> dict:
-    """Run a kubectl command and return parsed output."""
-    cmd = ["kubectl", f"--kubeconfig={kubeconfig}"] + args
+    """Run an oc command and return parsed output."""
+    cmd = ["oc", f"--kubeconfig={kubeconfig}"] + args
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return {
@@ -37,7 +37,7 @@ def get_namespaces() -> dict:
     Returns:
         Dict with namespaces list: [{name, status}]
     """
-    result = _run_kubectl(["get", "namespaces", "-o", "json"])
+    result = _run_oc(["get", "namespaces", "-o", "json"])
 
     if not result["success"]:
         return {"error": result["stderr"], "namespaces": []}
@@ -68,7 +68,7 @@ def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
     Returns:
         Dict with pods list: [{name, status, restart_count, node, ready}]
     """
-    result = _run_kubectl(["get", "pods", "-n", namespace, "-o", "json"])
+    result = _run_oc(["get", "pods", "-n", namespace, "-o", "json"])
 
     if not result["success"]:
         return {"error": result["stderr"], "pods": []}
@@ -108,7 +108,7 @@ def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
     Returns:
         Dict with events list: [{type, reason, message, object, time, count}]
     """
-    result = _run_kubectl(["get", "events", "-n", namespace, "--sort-by=lastTimestamp", "-o", "json"])
+    result = _run_oc(["get", "events", "-n", namespace, "--sort-by=lastTimestamp", "-o", "json"])
 
     if not result["success"]:
         return {"error": result["stderr"], "events": []}
@@ -145,12 +145,12 @@ def rollout_restart(deployment: str, namespace: str = DEFAULT_NAMESPACE) -> dict
     Returns:
         Dict with restart status and message
     """
-    result = _run_kubectl(["rollout", "restart", f"deployment/{deployment}", "-n", namespace])
+    result = _run_oc(["rollout", "restart", f"deployment/{deployment}", "-n", namespace])
 
     if not result["success"]:
         return {"success": False, "error": result["stderr"]}
 
-    wait_result = _run_kubectl(
+    wait_result = _run_oc(
         [
             "rollout",
             "status",
@@ -197,7 +197,7 @@ def patch_deployment_memory(
         ]
     )
 
-    result = _run_kubectl(
+    result = _run_oc(
         [
             "patch",
             "deployment",
@@ -240,7 +240,7 @@ def get_pod_logs(
     if container:
         args += ["-c", container]
 
-    result = _run_kubectl(args)
+    result = _run_oc(args)
     return {
         "pod": pod_name,
         "namespace": namespace,

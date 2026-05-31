@@ -47,7 +47,7 @@ runs:
 
     - name: Helm Install
       run: |
-        make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
+        make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_HUB=true ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
           HELM_EXTRA_ARGS="\
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig" \
           KAFKA_HELM_EXTRA_ARGS="\

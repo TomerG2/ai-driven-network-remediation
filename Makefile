@@ -20,6 +20,9 @@ MCP_CONTAINERFILE           := hub/mcp-servers/Containerfile
 MCP_OPENSHIFT_CONTAINERFILE := hub/mcp-servers/Containerfile.openshift
 MCP_CONTEXT                 := hub/mcp-servers
 
+# ── Hub (optional: ENABLE_HUB=true) ──────────────────────────────
+ENABLE_HUB             ?= true
+
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
 ENABLE_LOKISTACK       ?=
@@ -105,6 +108,7 @@ helm-depend:
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
+ifeq ($(ENABLE_HUB),true)
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		--set image.registry=$(REGISTRY) \
@@ -116,6 +120,9 @@ helm-install: namespace helm-depend
 		$(helm_adnr_llm_args) \
 		$(HELM_EXTRA_ARGS) \
 		--wait --timeout 30m
+else
+	@echo "ENABLE_HUB is not true — skipping hub chart deployment"
+endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
 endif
@@ -128,7 +135,9 @@ endif
 
 .PHONY: helm-uninstall
 helm-uninstall:
+ifeq ($(ENABLE_HUB),true)
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
 	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
@@ -234,6 +243,7 @@ unit-tests:
 
 .PHONY: integration-tests
 integration-tests:
+ifeq ($(ENABLE_HUB),true)
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
 	PF1_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
@@ -252,6 +262,9 @@ integration-tests:
 	PF8_PID=$$!; \
 	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && uv run pytest
+else
+	@echo "ENABLE_HUB is not true — skipping hub integration tests"
+endif
 
 # ── Langfuse day-2 targets ───────────────────────────────────────
 
