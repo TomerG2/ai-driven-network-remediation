@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 MCP_TRANSPORT: Literal["stdio", "sse", "streamable-http"] = os.environ.get(
     "MCP_TRANSPORT", "sse"
 )  # type: ignore[assignment]
-MCP_PORT = int(os.environ.get("MCP_PORT", "8004"))
+MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 
 AAP_URL = os.getenv("AAP_URL", "https://aap.aap.svc")

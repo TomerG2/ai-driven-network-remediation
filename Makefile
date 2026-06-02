@@ -272,6 +272,7 @@ minio-uninstall:
 unit-tests:
 	cd hub/agent-service && uv run pytest
 	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest
+	cd hub/mcp-servers/mcp-aap && uv sync --group dev && AAP_USERNAME=test AAP_PASSWORD=test uv run pytest
 
 .PHONY: integration-tests
 integration-tests:

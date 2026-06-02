@@ -1,0 +1,11 @@
+FROM python:3.13-slim
+
+RUN pip install --no-cache-dir fastapi==0.115.* uvicorn==0.34.*
+
+COPY main.py /app/main.py
+WORKDIR /app
+
+USER 1001
+EXPOSE 8080
+
+CMD ["python", "main.py"]

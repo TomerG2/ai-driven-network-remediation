@@ -197,6 +197,8 @@ mcp-servers:
       env:
         MCP_TRANSPORT: "streamable-http"
         MCP_PORT: "8000"
+        AAP_URL: "https://aap.aap.svc"
+        AAP_VERIFY_SSL: "true"
       envSecrets:
         AAP_USERNAME:
           name: noc-aap-secret
