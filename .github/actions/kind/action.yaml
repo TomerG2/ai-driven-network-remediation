@@ -45,6 +45,15 @@ runs:
         sed -i "s|https://127.0.0.1:[0-9]*|https://${CP_IP}:6443|g" /tmp/edge-kubeconfig
       shell: bash
 
+    - name: Pre-pull and load llamastack image into Kind
+      run: |
+        cd hub/helm && helm dependency update && cd ../..
+        LLAMA_IMG=$(helm show values hub/helm/charts/llama-stack-*.tgz | awk '/^image:/{f=1;next} f&&/^[^ ]/{f=0} f&&/repository:/{r=$2} f&&/tag:/{gsub(/"/,"",$2);t=$2} END{print r":"t}')
+        echo "Loading ${LLAMA_IMG} into Kind cluster"
+        docker pull "${LLAMA_IMG}"
+        kind load docker-image "${LLAMA_IMG}" --name kind
+      shell: bash
+
     - name: Deploy AAP mock for mcp-aap integration tests
       run: |
         docker build -t localhost:5001/aap-mock:ci -f hub/infra/aap-mock/Containerfile hub/infra/aap-mock
