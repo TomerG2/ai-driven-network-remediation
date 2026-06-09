@@ -20,16 +20,9 @@ class TestReadyEndpoint:
         assert response.json() == {"ready": True}
 
 
-REMEDIATION_STATE_FIELDS = {
-    "raw_event",
-    "confidence_override",
-    "context_snippets",
-    "root_cause_analysis",
-    "decision",
-    "execution_result",
-    "notifications_sent",
-    "awaiting_human_approval",
-}
+from agent_service.models import RemediationState
+
+REMEDIATION_STATE_FIELDS = set(RemediationState.model_fields.keys())
 
 
 class TestRemediateEndpoint:
