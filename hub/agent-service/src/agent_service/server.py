@@ -26,9 +26,9 @@ def ready():
 
 
 @app.post("/remediate", response_model=RemediationState)
-def remediate(request: RemediateRequest):  # TODO: async def + graph.ainvoke()
+async def remediate(request: RemediateRequest):
     graph = build_graph()
-    return graph.invoke(request.model_dump(exclude_none=True))
+    return await graph.ainvoke(request.model_dump(exclude_none=True))
 
 
 def start():
