@@ -13,6 +13,7 @@ app = FastAPI(title=os.environ.get("APP_TITLE", "agent-service"))
 class RemediateRequest(BaseModel):
     raw_event: str
     confidence_override: Optional[float] = None
+    failure_type_override: Optional[str] = None
 
 
 @app.get("/health")

@@ -31,6 +31,15 @@ class TestRemediateEndpoint:
         assert set(body.keys()) == INCIDENT_STATE_FIELDS
         assert body["decision"] != ""
 
+    def test_post_remediate_with_failure_type_override(self):
+        response = client.post(
+            "/remediate",
+            json={"raw_event": "test event", "confidence_override": 0.9, "failure_type_override": "KafkaLag"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["decision"] == "lightspeed"
+
     def test_post_remediate_rejects_missing_raw_event(self):
         response = client.post("/remediate", json={})
         assert response.status_code == 422
