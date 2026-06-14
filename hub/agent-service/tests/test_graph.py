@@ -34,6 +34,11 @@ class TestGraphCompilation:
         assert "remediate" in node_names
         assert "execute" not in node_names
 
+    def test_graph_has_lightspeed_node(self):
+        graph = build_graph()
+        node_names = {n.name for n in graph.get_graph().nodes.values()}
+        assert "lightspeed" in node_names
+
     def test_graph_has_no_request_approval_node(self):
         graph = build_graph()
         node_names = {n.name for n in graph.get_graph().nodes.values()}
@@ -79,14 +84,25 @@ class TestLinearFlow:
 
 
 class TestConditionalRouting:
-    def test_high_confidence_routes_through_remediate(self):
-        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.85)):
+    def test_high_confidence_known_type_routes_through_remediate(self):
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.85, "CrashLoopBackOff")):
             graph = build_graph()
             result = graph.invoke({"raw_event": "test event"})
 
         assert result["decision"] == "remediate"
         assert isinstance(result["remediation_result"], RemediationResult)
         assert result["remediation_result"].success is True
+        assert result["remediation_result"].generated_template_name is None
+
+    def test_high_confidence_generation_type_routes_through_lightspeed(self):
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.85, "KafkaLag")):
+            graph = build_graph()
+            result = graph.invoke({"raw_event": "test event"})
+
+        assert result["decision"] == "lightspeed"
+        assert isinstance(result["remediation_result"], RemediationResult)
+        assert result["remediation_result"].generated_template_name is not None
+        assert result["remediation_result"].generated_playbook_name is not None
 
     def test_low_confidence_routes_through_escalate(self):
         with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.5)):
@@ -94,6 +110,14 @@ class TestConditionalRouting:
             result = graph.invoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
+
+    def test_low_confidence_escalates_regardless_of_failure_type(self):
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.5, "KafkaLag")):
+            graph = build_graph()
+            result = graph.invoke({"raw_event": "test event"})
+
+        assert result["decision"] == "escalate"
+        assert result.get("remediation_result") is None
 
     def test_mid_confidence_routes_to_escalate(self):
         with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.75)):
@@ -109,6 +133,15 @@ class TestConditionalRouting:
             result = graph.invoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
+
+    def test_custom_thresholds_route_to_lightspeed(self):
+        config = GraphConfig(remediate_threshold=0.7, escalate_threshold=0.5)
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.75, "DNSFailure")):
+            graph = build_graph(config)
+            result = graph.invoke({"raw_event": "test event"})
+
+        assert result["decision"] == "lightspeed"
+        assert result["remediation_result"].generated_template_name is not None
 
 
 class TestConfidenceOverride:
@@ -134,6 +167,13 @@ class TestCli:
 
         assert result.exit_code == 0
         assert "'decision': 'escalate'" in result.output
+
+    def test_lightspeed_route_via_failure_type(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--failure-type", "KafkaLag"])
+
+        assert result.exit_code == 0
+        assert "'decision': 'lightspeed'" in result.output
 
     def test_mid_confidence_routes_to_escalate(self):
         runner = CliRunner()
