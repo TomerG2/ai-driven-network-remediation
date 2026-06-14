@@ -1,16 +1,22 @@
 import time
 import uuid
-from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-
-class Severity(str, Enum):
-    low = "low"
-    medium = "medium"
-    high = "high"
-    critical = "critical"
+FailureType = Literal[
+    "OOMKilled",
+    "CrashLoopBackOff",
+    "ConfigError",
+    "NetworkTimeout",
+    "StorageFull",
+    "CertificateExpired",
+    "DNSFailure",
+    "KafkaLag",
+    "PostgresConnPool",
+    "AAPJobFailure",
+    "Unknown",
+]
 
 
 class LogEvent(BaseModel):
@@ -26,12 +32,13 @@ class LogEvent(BaseModel):
 
 
 class RootCauseAnalysis(BaseModel):
-    root_cause: str
+    failure_type: FailureType
     confidence: float
-    severity: Severity
-    affected_components: list[str]
-    recommended_playbook: str
-    reasoning: str
+    summary: str
+    evidence: list[str]
+    recommended_actions: list[str]
+    estimated_severity: Literal["critical", "high", "medium", "low"]
+    runbook_reference: str
 
 
 class GraphConfig(BaseModel):
@@ -46,7 +53,10 @@ class IncidentState(BaseModel):
     incident_start_ms: float = Field(default_factory=lambda: time.time() * 1000)
     confidence_override: Optional[float] = None
     context_snippets: list[str] = []
+    rag_query_used: str = ""
     root_cause_analysis: Optional[RootCauseAnalysis] = None
+    analysis_tokens_used: int = 0
+    analysis_latency_ms: float = 0.0
     decision: str = ""
     execution_result: str = ""
     notifications_sent: list[str] = []

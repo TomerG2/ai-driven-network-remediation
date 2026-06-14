@@ -7,15 +7,16 @@ from agent_service.graph import build_graph
 from agent_service.models import GraphConfig, LogEvent, RootCauseAnalysis
 
 
-def _make_analyze_stub(confidence: float):
+def _make_analyze_stub(confidence: float, failure_type: str = "CrashLoopBackOff"):
     def analyze_node(state: dict) -> dict:
         rca = RootCauseAnalysis(
-            root_cause="stub",
+            failure_type=failure_type,
             confidence=confidence,
-            severity="medium",
-            affected_components=["test"],
-            recommended_playbook="test-playbook",
-            reasoning="stub reasoning",
+            summary="stub summary",
+            evidence=["stub evidence"],
+            recommended_actions=["stub action"],
+            estimated_severity="medium",
+            runbook_reference="stub-runbook",
         )
         return {"root_cause_analysis": rca}
 
@@ -37,6 +38,18 @@ class TestNormalizeNode:
         assert "nginx CrashLoopBackOff" in result["log_event"].message
 
 
+class TestRagRetrievalNode:
+    def test_rag_retrieval_sets_rag_query_used(self):
+        graph = build_graph()
+        result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert result["rag_query_used"] != ""
+
+    def test_rag_retrieval_sets_context_snippets(self):
+        graph = build_graph()
+        result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert len(result["context_snippets"]) > 0
+
+
 class TestLinearFlow:
     def test_end_to_end_produces_expected_state(self):
         graph = build_graph()
@@ -46,9 +59,11 @@ class TestLinearFlow:
         assert result["log_event"] is not None
         assert isinstance(result["log_event"], LogEvent)
         assert len(result["context_snippets"]) > 0
+        assert result["rag_query_used"] != ""
         assert result["root_cause_analysis"] is not None
         assert isinstance(result["root_cause_analysis"], RootCauseAnalysis)
         assert isinstance(result["root_cause_analysis"].confidence, float)
+        assert result["root_cause_analysis"].failure_type is not None
         assert result["decision"] != ""
         assert len(result["notifications_sent"]) > 0
 

@@ -7,37 +7,55 @@ from agent_service.models import GraphConfig, IncidentState, LogEvent, RootCause
 class TestRootCauseAnalysis:
     def test_valid_analysis(self):
         rca = RootCauseAnalysis(
-            root_cause="nginx config missing",
+            failure_type="OOMKilled",
             confidence=0.9,
-            severity="high",
-            affected_components=["nginx", "frontend"],
-            recommended_playbook="restart-nginx",
-            reasoning="Config file was deleted",
+            summary="Pod exceeded memory limit",
+            evidence=["OOMKilled in dmesg", "container restart count=5"],
+            recommended_actions=["increase memory limit", "check for memory leaks"],
+            estimated_severity="high",
+            runbook_reference="runbooks/oomkilled.md",
         )
         assert rca.confidence == 0.9
-        assert rca.severity == "high"
-        assert rca.affected_components == ["nginx", "frontend"]
+        assert rca.failure_type == "OOMKilled"
+        assert rca.estimated_severity == "high"
+        assert len(rca.evidence) == 2
+        assert len(rca.recommended_actions) == 2
+        assert rca.runbook_reference == "runbooks/oomkilled.md"
 
     def test_confidence_must_be_float(self):
         with pytest.raises(ValidationError):
             RootCauseAnalysis(
-                root_cause="test",
+                failure_type="OOMKilled",
                 confidence="not_a_number",
-                severity="low",
-                affected_components=[],
-                recommended_playbook="test",
-                reasoning="test",
+                summary="test",
+                evidence=[],
+                recommended_actions=[],
+                estimated_severity="low",
+                runbook_reference="test",
             )
 
-    def test_affected_components_must_be_list_of_strings(self):
+    def test_invalid_failure_type_rejected(self):
         with pytest.raises(ValidationError):
             RootCauseAnalysis(
-                root_cause="test",
+                failure_type="NotARealType",
                 confidence=0.5,
-                severity="low",
-                affected_components="not_a_list",
-                recommended_playbook="test",
-                reasoning="test",
+                summary="test",
+                evidence=[],
+                recommended_actions=[],
+                estimated_severity="low",
+                runbook_reference="test",
+            )
+
+    def test_invalid_estimated_severity_rejected(self):
+        with pytest.raises(ValidationError):
+            RootCauseAnalysis(
+                failure_type="OOMKilled",
+                confidence=0.5,
+                summary="test",
+                evidence=[],
+                recommended_actions=[],
+                estimated_severity="ultra_high",
+                runbook_reference="test",
             )
 
 
@@ -59,6 +77,12 @@ class TestIncidentState:
         assert state.incident_start_ms > 0
         assert state.confidence_override is None
 
+    def test_rag_and_analysis_fields_have_defaults(self):
+        state = IncidentState(raw_event="pod crashloop")
+        assert state.rag_query_used == ""
+        assert state.analysis_tokens_used == 0
+        assert state.analysis_latency_ms == 0.0
+
     def test_state_with_log_event(self):
         event = LogEvent(
             timestamp="2024-01-01T00:00:00Z",
@@ -76,15 +100,17 @@ class TestIncidentState:
 
     def test_state_with_root_cause_analysis(self):
         rca = RootCauseAnalysis(
-            root_cause="OOM",
+            failure_type="OOMKilled",
             confidence=0.95,
-            severity="critical",
-            affected_components=["nginx"],
-            recommended_playbook="restart-nginx",
-            reasoning="Memory limit exceeded",
+            summary="Memory limit exceeded",
+            evidence=["OOMKilled event"],
+            recommended_actions=["increase memory"],
+            estimated_severity="critical",
+            runbook_reference="runbooks/oomkilled.md",
         )
         state = IncidentState(raw_event="pod crashloop", root_cause_analysis=rca)
         assert state.root_cause_analysis.confidence == 0.95
+        assert state.root_cause_analysis.failure_type == "OOMKilled"
 
 
 class TestLogEvent:
