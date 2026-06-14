@@ -41,6 +41,20 @@ class RootCauseAnalysis(BaseModel):
     runbook_reference: str
 
 
+class RemediationResult(BaseModel):
+    action_taken: str
+    tool_used: str
+    success: bool
+    job_id: str
+    duration_seconds: float
+    output_summary: str
+    timestamp: str
+    generated_template_name: Optional[str] = None
+    generated_template_id: Optional[str] = None
+    generated_playbook_name: Optional[str] = None
+    generated_playbook_preview: Optional[str] = None
+
+
 class GraphConfig(BaseModel):
     remediate_threshold: float = 0.8
     escalate_threshold: float = 0.7
@@ -58,6 +72,4 @@ class IncidentState(BaseModel):
     analysis_tokens_used: int = 0
     analysis_latency_ms: float = 0.0
     decision: str = ""
-    execution_result: str = ""
-    notifications_sent: list[str] = []
-    awaiting_human_approval: bool = False
+    remediation_result: Optional[RemediationResult] = None

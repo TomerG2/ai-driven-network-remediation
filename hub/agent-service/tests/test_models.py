@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_service.models import GraphConfig, IncidentState, LogEvent, RootCauseAnalysis
+from agent_service.models import GraphConfig, IncidentState, LogEvent, RemediationResult, RootCauseAnalysis
 
 
 class TestRootCauseAnalysis:
@@ -66,9 +66,13 @@ class TestIncidentState:
         assert state.context_snippets == []
         assert state.root_cause_analysis is None
         assert state.decision == ""
-        assert state.execution_result == ""
-        assert state.notifications_sent == []
-        assert state.awaiting_human_approval is False
+        assert state.remediation_result is None
+
+    def test_old_fields_removed(self):
+        fields = set(IncidentState.model_fields.keys())
+        assert "awaiting_human_approval" not in fields
+        assert "notifications_sent" not in fields
+        assert "execution_result" not in fields
 
     def test_new_fields_have_defaults(self):
         state = IncidentState(raw_event="pod crashloop")
@@ -141,6 +145,47 @@ class TestLogEvent:
                 edge_site_id="edge-01",
                 kafka_offset="not_an_int",
                 raw="raw",
+            )
+
+
+class TestRemediationResult:
+    def test_valid_result(self):
+        result = RemediationResult(
+            action_taken="restart pod",
+            tool_used="openshift",
+            success=True,
+            job_id="job-123",
+            duration_seconds=1.5,
+            output_summary="Pod restarted successfully",
+            timestamp="2024-01-01T00:00:00Z",
+        )
+        assert result.success is True
+        assert result.action_taken == "restart pod"
+        assert result.generated_template_name is None
+
+    def test_valid_result_with_lightspeed_fields(self):
+        result = RemediationResult(
+            action_taken="generate playbook",
+            tool_used="lightspeed",
+            success=True,
+            job_id="job-456",
+            duration_seconds=3.2,
+            output_summary="Playbook generated",
+            timestamp="2024-01-01T00:00:00Z",
+            generated_template_name="restart-template",
+            generated_template_id="tmpl-789",
+            generated_playbook_name="restart-playbook",
+            generated_playbook_preview="- hosts: all\n  tasks: ...",
+        )
+        assert result.generated_template_name == "restart-template"
+        assert result.generated_playbook_preview is not None
+
+    def test_missing_required_field_rejected(self):
+        with pytest.raises(ValidationError):
+            RemediationResult(
+                action_taken="restart pod",
+                tool_used="openshift",
+                success=True,
             )
 
 

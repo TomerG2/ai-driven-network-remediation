@@ -7,11 +7,10 @@ from agent_service.models import GraphConfig, IncidentState
 from agent_service.nodes import (
     analyze_node,
     escalate_node,
-    execute_node,
     normalize_node,
     notify_node,
     rag_retrieval_node,
-    request_approval_node,
+    remediate_node,
 )
 from agent_service.nodes.decide import make_decide_node
 
@@ -30,9 +29,8 @@ def build_graph(config: Optional[GraphConfig] = None):
     graph.add_node("rag_retrieval", rag_retrieval_node)
     graph.add_node("analyze", analyze_node)
     graph.add_node("decide", make_decide_node(config))
-    graph.add_node("execute", execute_node)
+    graph.add_node("remediate", remediate_node)
     graph.add_node("escalate", escalate_node)
-    graph.add_node("request_approval", request_approval_node)
     graph.add_node("notify", notify_node)
 
     graph.add_edge(START, "normalize")
@@ -42,11 +40,10 @@ def build_graph(config: Optional[GraphConfig] = None):
     graph.add_conditional_edges(
         "decide",
         _route_after_decide,
-        {"execute": "execute", "escalate": "escalate", "request_approval": "request_approval"},
+        {"remediate": "remediate", "escalate": "escalate"},
     )
-    graph.add_edge("execute", "notify")
+    graph.add_edge("remediate", "notify")
     graph.add_edge("escalate", "notify")
-    graph.add_edge("request_approval", "notify")
     graph.add_edge("notify", END)
 
     return graph.compile()

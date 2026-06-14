@@ -7,10 +7,10 @@ def make_decide_node(config: GraphConfig):
     def decide_node(state: dict) -> dict:
         logger.info("Decide node invoked")
         confidence = state.root_cause_analysis.confidence
-        if confidence > config.remediate_threshold:
-            return {"decision": "execute"}
+        if confidence >= config.remediate_threshold:
+            return {"decision": "remediate"}
         if confidence < config.escalate_threshold:
             return {"decision": "escalate"}
-        return {"decision": "request_approval"}
+        return {"decision": "escalate"}
 
     return decide_node

@@ -4,7 +4,7 @@ from click.testing import CliRunner
 
 from agent_service import main
 from agent_service.graph import build_graph
-from agent_service.models import GraphConfig, LogEvent, RootCauseAnalysis
+from agent_service.models import GraphConfig, LogEvent, RemediationResult, RootCauseAnalysis
 
 
 def _make_analyze_stub(confidence: float, failure_type: str = "CrashLoopBackOff"):
@@ -27,6 +27,17 @@ class TestGraphCompilation:
     def test_graph_compiles(self):
         graph = build_graph()
         assert graph is not None
+
+    def test_graph_has_remediate_node(self):
+        graph = build_graph()
+        node_names = {n.name for n in graph.get_graph().nodes.values()}
+        assert "remediate" in node_names
+        assert "execute" not in node_names
+
+    def test_graph_has_no_request_approval_node(self):
+        graph = build_graph()
+        node_names = {n.name for n in graph.get_graph().nodes.values()}
+        assert "request_approval" not in node_names
 
 
 class TestNormalizeNode:
@@ -65,18 +76,17 @@ class TestLinearFlow:
         assert isinstance(result["root_cause_analysis"].confidence, float)
         assert result["root_cause_analysis"].failure_type is not None
         assert result["decision"] != ""
-        assert len(result["notifications_sent"]) > 0
 
 
 class TestConditionalRouting:
-    def test_high_confidence_routes_through_execute(self):
+    def test_high_confidence_routes_through_remediate(self):
         with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.85)):
             graph = build_graph()
             result = graph.invoke({"raw_event": "test event"})
 
-        assert result["decision"] == "execute"
-        assert result["execution_result"] != ""
-        assert len(result["notifications_sent"]) > 0
+        assert result["decision"] == "remediate"
+        assert isinstance(result["remediation_result"], RemediationResult)
+        assert result["remediation_result"].success is True
 
     def test_low_confidence_routes_through_escalate(self):
         with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.5)):
@@ -84,16 +94,13 @@ class TestConditionalRouting:
             result = graph.invoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
-        assert len(result["notifications_sent"]) > 0
 
-    def test_mid_confidence_routes_through_request_approval(self):
+    def test_mid_confidence_routes_to_escalate(self):
         with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.75)):
             graph = build_graph()
             result = graph.invoke({"raw_event": "test event"})
 
-        assert result["decision"] == "request_approval"
-        assert result["awaiting_human_approval"] is True
-        assert len(result["notifications_sent"]) > 0
+        assert result["decision"] == "escalate"
 
     def test_custom_thresholds_alter_routing(self):
         config = GraphConfig(remediate_threshold=0.9, escalate_threshold=0.8)
@@ -101,7 +108,7 @@ class TestConditionalRouting:
             graph = build_graph(config)
             result = graph.invoke({"raw_event": "test event"})
 
-        assert result["decision"] == "request_approval"
+        assert result["decision"] == "escalate"
 
 
 class TestConfidenceOverride:
@@ -114,12 +121,12 @@ class TestConfidenceOverride:
 
 
 class TestCli:
-    def test_default_confidence_routes_to_execute(self):
+    def test_default_confidence_routes_to_remediate(self):
         runner = CliRunner()
         result = runner.invoke(main)
 
         assert result.exit_code == 0
-        assert "'decision': 'execute'" in result.output
+        assert "'decision': 'remediate'" in result.output
 
     def test_low_confidence_routes_to_escalate(self):
         runner = CliRunner()
@@ -128,9 +135,9 @@ class TestCli:
         assert result.exit_code == 0
         assert "'decision': 'escalate'" in result.output
 
-    def test_mid_confidence_routes_to_request_approval(self):
+    def test_mid_confidence_routes_to_escalate(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--confidence", "0.75"])
 
         assert result.exit_code == 0
-        assert "'decision': 'request_approval'" in result.output
+        assert "'decision': 'escalate'" in result.output
