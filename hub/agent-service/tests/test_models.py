@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_service.models import GraphConfig, RemediationState, RootCauseAnalysis
+from agent_service.models import GraphConfig, IncidentState, LogEvent, RootCauseAnalysis
 
 
 class TestRootCauseAnalysis:
@@ -41,9 +41,9 @@ class TestRootCauseAnalysis:
             )
 
 
-class TestRemediationState:
+class TestIncidentState:
     def test_valid_state(self):
-        state = RemediationState(raw_event="pod crashloop")
+        state = IncidentState(raw_event="pod crashloop")
         assert state.raw_event == "pod crashloop"
         assert state.context_snippets == []
         assert state.root_cause_analysis is None
@@ -51,6 +51,28 @@ class TestRemediationState:
         assert state.execution_result == ""
         assert state.notifications_sent == []
         assert state.awaiting_human_approval is False
+
+    def test_new_fields_have_defaults(self):
+        state = IncidentState(raw_event="pod crashloop")
+        assert state.log_event is None
+        assert state.incident_id != ""
+        assert state.incident_start_ms > 0
+        assert state.confidence_override is None
+
+    def test_state_with_log_event(self):
+        event = LogEvent(
+            timestamp="2024-01-01T00:00:00Z",
+            message="crash",
+            level="error",
+            namespace="prod",
+            pod_name="nginx-abc",
+            container="nginx",
+            edge_site_id="edge-01",
+            kafka_offset=1,
+            raw="raw",
+        )
+        state = IncidentState(raw_event="pod crashloop", log_event=event)
+        assert state.log_event.message == "crash"
 
     def test_state_with_root_cause_analysis(self):
         rca = RootCauseAnalysis(
@@ -61,8 +83,39 @@ class TestRemediationState:
             recommended_playbook="restart-nginx",
             reasoning="Memory limit exceeded",
         )
-        state = RemediationState(raw_event="pod crashloop", root_cause_analysis=rca)
+        state = IncidentState(raw_event="pod crashloop", root_cause_analysis=rca)
         assert state.root_cause_analysis.confidence == 0.95
+
+
+class TestLogEvent:
+    def test_valid_log_event(self):
+        event = LogEvent(
+            timestamp="2024-01-01T00:00:00Z",
+            message="pod crash detected",
+            level="error",
+            namespace="prod",
+            pod_name="nginx-abc123",
+            container="nginx",
+            edge_site_id="edge-01",
+            kafka_offset=42,
+            raw='{"msg": "pod crash detected"}',
+        )
+        assert event.message == "pod crash detected"
+        assert event.kafka_offset == 42
+
+    def test_kafka_offset_must_be_int(self):
+        with pytest.raises(ValidationError):
+            LogEvent(
+                timestamp="2024-01-01T00:00:00Z",
+                message="test",
+                level="info",
+                namespace="default",
+                pod_name="test",
+                container="test",
+                edge_site_id="edge-01",
+                kafka_offset="not_an_int",
+                raw="raw",
+            )
 
 
 class TestGraphConfig:

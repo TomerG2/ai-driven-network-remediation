@@ -3,20 +3,20 @@ from typing import Optional
 
 from langgraph.graph import END, START, StateGraph
 
-from agent_service.models import GraphConfig, RemediationState
+from agent_service.models import GraphConfig, IncidentState
 from agent_service.nodes import (
     analyze_node,
     context_node,
     escalate_node,
     execute_node,
-    ingest_node,
+    normalize_node,
     notify_node,
     request_approval_node,
 )
 from agent_service.nodes.decide import make_decide_node
 
 
-def _route_after_decide(state: RemediationState) -> str:
+def _route_after_decide(state: IncidentState) -> str:
     return state.decision
 
 
@@ -24,9 +24,9 @@ def build_graph(config: Optional[GraphConfig] = None):
     if config is None:
         config = GraphConfig()
 
-    graph = StateGraph(RemediationState)
+    graph = StateGraph(IncidentState)
 
-    graph.add_node("ingest", ingest_node)
+    graph.add_node("normalize", normalize_node)
     graph.add_node("context", context_node)
     graph.add_node("analyze", analyze_node)
     graph.add_node("decide", make_decide_node(config))
@@ -35,8 +35,8 @@ def build_graph(config: Optional[GraphConfig] = None):
     graph.add_node("request_approval", request_approval_node)
     graph.add_node("notify", notify_node)
 
-    graph.add_edge(START, "ingest")
-    graph.add_edge("ingest", "context")
+    graph.add_edge(START, "normalize")
+    graph.add_edge("normalize", "context")
     graph.add_edge("context", "analyze")
     graph.add_edge("analyze", "decide")
     graph.add_conditional_edges(

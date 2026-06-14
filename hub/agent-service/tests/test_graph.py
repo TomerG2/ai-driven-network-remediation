@@ -4,7 +4,7 @@ from click.testing import CliRunner
 
 from agent_service import main
 from agent_service.graph import build_graph
-from agent_service.models import GraphConfig, RootCauseAnalysis
+from agent_service.models import GraphConfig, LogEvent, RootCauseAnalysis
 
 
 def _make_analyze_stub(confidence: float):
@@ -28,12 +28,23 @@ class TestGraphCompilation:
         assert graph is not None
 
 
+class TestNormalizeNode:
+    def test_normalize_produces_log_event(self):
+        graph = build_graph()
+        result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert result["log_event"] is not None
+        assert isinstance(result["log_event"], LogEvent)
+        assert "nginx CrashLoopBackOff" in result["log_event"].message
+
+
 class TestLinearFlow:
     def test_end_to_end_produces_expected_state(self):
         graph = build_graph()
         result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
 
         assert result["raw_event"] == "nginx CrashLoopBackOff in namespace prod"
+        assert result["log_event"] is not None
+        assert isinstance(result["log_event"], LogEvent)
         assert len(result["context_snippets"]) > 0
         assert result["root_cause_analysis"] is not None
         assert isinstance(result["root_cause_analysis"], RootCauseAnalysis)
