@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from agent_service.graph import build_graph
-from agent_service.models import IncidentState
+from agent_service.models import FailureType, IncidentState
 
 app = FastAPI(title=os.environ.get("APP_TITLE", "agent-service"))
 
@@ -13,7 +13,7 @@ app = FastAPI(title=os.environ.get("APP_TITLE", "agent-service"))
 class RemediateRequest(BaseModel):
     raw_event: str
     confidence_override: Optional[float] = None
-    failure_type_override: Optional[str] = None
+    failure_type_override: Optional[FailureType] = None
 
 
 @app.get("/health")

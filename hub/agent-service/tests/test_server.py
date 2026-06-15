@@ -40,6 +40,13 @@ class TestRemediateEndpoint:
         body = response.json()
         assert body["decision"] == "lightspeed"
 
+    def test_post_remediate_rejects_invalid_failure_type_override(self):
+        response = client.post(
+            "/remediate",
+            json={"raw_event": "test event", "failure_type_override": "FooBar"},
+        )
+        assert response.status_code == 422
+
     def test_post_remediate_rejects_missing_raw_event(self):
         response = client.post("/remediate", json={})
         assert response.status_code == 422
