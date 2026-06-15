@@ -9,28 +9,23 @@ itil + rest_service roles needed for incident table CRUD.
 
 import argparse
 import json
+import os
 import secrets
 import string
+import sys
 from typing import Any, Dict
 
 import requests
 
-from .utils import get_env_var
+from .servicenow_client import ServiceNowClient
+
+CREDS_FILE = ".servicenow-creds.json"
 
 
-class ServiceNowUserAutomation:
+class ServiceNowUserAutomation(ServiceNowClient):
     def __init__(self, config: Dict[str, Any]):
-        self.instance_url = get_env_var("SERVICENOW_INSTANCE_URL").rstrip("/")
-        self.admin_username = get_env_var("SERVICENOW_USERNAME")
-        self.admin_password = get_env_var("SERVICENOW_PASSWORD")
-
+        super().__init__()
         self.agent_config = config["servicenow"]["agent_user"]
-
-        self.session = requests.Session()
-        self.session.auth = (self.admin_username, self.admin_password)
-        self.session.headers.update(
-            {"Content-Type": "application/json", "Accept": "application/json"}
-        )
 
     def generate_password(self, length: int = 16) -> str:
         """Generate a secure random password."""
@@ -38,18 +33,18 @@ class ServiceNowUserAutomation:
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
     def check_user_exists(self, user_id: str) -> bool:
-        """Check if user already exists."""
+        """Check if user already exists.
+
+        Raises on connectivity/auth errors so they aren't masked as
+        'user not found'.
+        """
         url = f"{self.instance_url}/api/now/table/sys_user"
         params = {"sysparm_query": f"user_name={user_id}"}
 
-        try:
-            response = self.session.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
-            return len(data.get("result", [])) > 0
-        except requests.RequestException as e:
-            print(f"Error checking if user exists: {e}")
-            return False
+        response = self.session.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        return len(data.get("result", [])) > 0
 
     def create_user(self) -> Dict[str, str]:
         """Create the NOC Agent user."""
@@ -79,14 +74,21 @@ class ServiceNowUserAutomation:
             response.raise_for_status()
 
             result = response.json()
+            sys_id = result["result"]["sys_id"]
             print(f"User '{user_id}' created successfully!")
-            print(f"Generated password: {password}")
-            print("Please save this password securely!")
+
+            creds = {
+                "user_id": user_id,
+                "password": password,
+                "sys_id": sys_id,
+                "instance_url": self.instance_url,
+            }
+            self._write_creds_file(creds)
 
             return {
                 "user_id": user_id,
                 "password": password,
-                "sys_id": result["result"]["sys_id"],
+                "sys_id": sys_id,
             }
 
         except requests.RequestException as e:
@@ -95,24 +97,18 @@ class ServiceNowUserAutomation:
                 print(f"Response: {e.response.text}")
             raise
 
-    def get_user_sys_id(self, user_id: str) -> str:
-        """Get the sys_id for a user."""
-        url = f"{self.instance_url}/api/now/table/sys_user"
-        params = {"sysparm_query": f"user_name={user_id}", "sysparm_fields": "sys_id"}
-
+    @staticmethod
+    def _write_creds_file(creds: Dict[str, str]) -> None:
+        """Write credentials to a gitignored file with restricted permissions."""
+        fd = os.open(CREDS_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
-            response = self.session.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-            if data.get("result"):
-                return str(data["result"][0]["sys_id"])
-            else:
-                raise ValueError(f"User '{user_id}' not found")
-
-        except requests.RequestException as e:
-            print(f"Error getting user sys_id: {e}")
+            with os.fdopen(fd, "w") as f:
+                json.dump(creds, f, indent=2)
+                f.write("\n")
+        except Exception:
+            os.close(fd)
             raise
+        print(f"Credentials written to {CREDS_FILE} (mode 0600)")
 
     def assign_roles(self, user_sys_id: str) -> None:
         """Assign configured roles to the user."""
@@ -201,10 +197,10 @@ def main() -> None:
 
     except FileNotFoundError:
         print(f"Configuration file not found: {args.config}")
+        sys.exit(1)
     except json.JSONDecodeError:
         print(f"Invalid JSON in configuration file: {args.config}")
-    except Exception as e:
-        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -9,46 +9,19 @@ for incident management.
 
 import argparse
 import json
+import sys
 from typing import Any, Dict
 
 import requests
 
-from .utils import get_env_var
+from .servicenow_client import ServiceNowClient
 
 
-class ServiceNowAPIAutomation:
+class ServiceNowAPIAutomation(ServiceNowClient):
     def __init__(self, config: Dict[str, Any]):
-        self.instance_url = get_env_var("SERVICENOW_INSTANCE_URL").rstrip("/")
-        self.admin_username = get_env_var("SERVICENOW_USERNAME")
-        self.admin_password = get_env_var("SERVICENOW_PASSWORD")
-
+        super().__init__()
         self.agent_user_id = config["servicenow"]["agent_user"]["user_id"]
         self.api_key_name = config["servicenow"]["api_key_name"]
-
-        self.session = requests.Session()
-        self.session.auth = (self.admin_username, self.admin_password)
-        self.session.headers.update(
-            {"Content-Type": "application/json", "Accept": "application/json"}
-        )
-
-    def get_user_sys_id(self, user_id: str) -> str:
-        """Get the sys_id for a user."""
-        url = f"{self.instance_url}/api/now/table/sys_user"
-        params = {"sysparm_query": f"user_name={user_id}", "sysparm_fields": "sys_id"}
-
-        try:
-            response = self.session.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-            if data.get("result"):
-                return str(data["result"][0]["sys_id"])
-            else:
-                raise ValueError(f"User '{user_id}' not found")
-
-        except requests.RequestException as e:
-            print(f"Error getting user sys_id: {e}")
-            raise
 
     def create_api_key(self) -> Dict[str, str]:
         """Create API key for the NOC agent user."""
@@ -287,10 +260,10 @@ def main() -> None:
 
     except FileNotFoundError:
         print(f"Configuration file not found: {args.config}")
+        sys.exit(1)
     except json.JSONDecodeError:
         print(f"Invalid JSON in configuration file: {args.config}")
-    except Exception as e:
-        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

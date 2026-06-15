@@ -94,9 +94,9 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m servicenow_bootstrap.setup --config config.json
-  python -m servicenow_bootstrap.setup --config config.json --skip-user
-  python -m servicenow_bootstrap.setup --config config.json --skip-validation
+  python -m servicenow_bootstrap.orchestrator --config config.json
+  python -m servicenow_bootstrap.orchestrator --config config.json --skip-user
+  python -m servicenow_bootstrap.orchestrator --config config.json --skip-validation
         """,
     )
 
@@ -139,8 +139,7 @@ Examples:
     print(f"Admin user      : {config['servicenow']['admin_username']}")
     print(f"Agent user      : {config['servicenow']['agent_user']['user_id']}")
     print(
-        f"Assignment groups: "
-        f"{', '.join(config['incident']['assignment_groups'])}"
+        f"Assignment groups: " f"{', '.join(config['incident']['assignment_groups'])}"
     )
 
     steps_to_run = []
@@ -192,10 +191,20 @@ Examples:
             data_results = data_automation.setup_incident_data()
             results["incident_data"] = data_results
 
-        # Step 4: Validate
+        # Step 4: Validate (as the noc_agent user, not admin)
         if not args.skip_validation:
             print_step(4, "Validate Incident CRUD")
-            tester = ServiceNowIncidentTester()
+            user_result = results.get("user", {})
+            agent_user = user_result.get("user_id")
+            agent_pass = user_result.get("password")
+            if agent_user and agent_pass and agent_pass != "existing_user":
+                print(f"Validating as '{agent_user}' (newly created agent)...")
+                tester = ServiceNowIncidentTester(
+                    username=agent_user, password=agent_pass
+                )
+            else:
+                print("Validating with credentials from environment...")
+                tester = ServiceNowIncidentTester()
             validation_results = tester.run_all_tests()
             results["validation"] = validation_results
 
@@ -208,10 +217,9 @@ Examples:
             user_id = config["servicenow"]["agent_user"]["user_id"]
             print(f"  User created: {user_id}")
             if results["user"].get("password") not in (None, "existing_user"):
-                print(
-                    f"  Password: {results['user']['password']} "
-                    f"(save this!)"
-                )
+                from .create_noc_agent_user import CREDS_FILE
+
+                print(f"  Credentials: see {CREDS_FILE}")
 
         if results.get("api", {}).get("api_key"):
             print(f"  API Key: {config['servicenow']['api_key_name']}")
@@ -226,9 +234,7 @@ Examples:
                 print(f"  Sample incident: {inc['ticket_number']}")
 
         if results.get("validation"):
-            failed = [
-                n for n, (ok, _) in results["validation"].items() if not ok
-            ]
+            failed = [n for n, (ok, _) in results["validation"].items() if not ok]
             if not failed:
                 print("  Validation: all tests passed")
             else:
@@ -243,8 +249,8 @@ Examples:
         )
         print(
             "  4. Deploy with: make helm-install "
-            "HELM_EXTRA_ARGS=\"--set mcp-servers.mcp-servers."
-            "noc-servicenow.env.SERVICENOW_MODE=real ...\""
+            'HELM_EXTRA_ARGS="--set mcp-servers.mcp-servers.'
+            'noc-servicenow.env.SERVICENOW_MODE=real ..."'
         )
 
     except KeyboardInterrupt:

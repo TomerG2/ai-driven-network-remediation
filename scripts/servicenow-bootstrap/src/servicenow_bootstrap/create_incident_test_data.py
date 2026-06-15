@@ -9,44 +9,35 @@ network remediation quickstart.
 
 import argparse
 import json
+import sys
 from typing import Any, Dict, List
 
 import requests
 
-from .utils import get_env_var
+from .servicenow_client import ServiceNowClient
 
 
-class ServiceNowIncidentDataAutomation:
+class ServiceNowIncidentDataAutomation(ServiceNowClient):
     def __init__(self, config: Dict[str, Any]):
-        self.instance_url = get_env_var("SERVICENOW_INSTANCE_URL").rstrip("/")
-        self.admin_username = get_env_var("SERVICENOW_USERNAME")
-        self.admin_password = get_env_var("SERVICENOW_PASSWORD")
-
+        super().__init__()
         self.incident_config = config.get("incident", {})
-        self.caller_name = config.get("servicenow", {}).get(
-            "caller_name", "NOC Agent"
-        )
-
-        self.session = requests.Session()
-        self.session.auth = (self.admin_username, self.admin_password)
-        self.session.headers.update(
-            {"Content-Type": "application/json", "Accept": "application/json"}
-        )
+        self.caller_name = config.get("servicenow", {}).get("caller_name", "NOC Agent")
 
     def _group_exists(self, group_name: str) -> bool:
-        """Check if a sys_user_group already exists by name."""
+        """Check if a sys_user_group already exists by name.
+
+        Raises on connectivity/auth errors so they aren't masked as
+        'group not found'.
+        """
         url = f"{self.instance_url}/api/now/table/sys_user_group"
         params = {
             "sysparm_query": f"name={group_name}",
             "sysparm_fields": "sys_id",
         }
 
-        try:
-            response = self.session.get(url, params=params)
-            response.raise_for_status()
-            return len(response.json().get("result", [])) > 0
-        except requests.RequestException:
-            return False
+        response = self.session.get(url, params=params)
+        response.raise_for_status()
+        return len(response.json().get("result", [])) > 0
 
     def create_assignment_groups(self) -> List[Dict[str, str]]:
         """Create assignment groups from config."""
@@ -67,7 +58,6 @@ class ServiceNowIncidentDataAutomation:
                     f"AI-driven network remediation"
                 ),
                 "active": "true",
-                "type": "string:6816f79cc0a8016401c5a33be04be441",
             }
 
             try:
@@ -75,12 +65,16 @@ class ServiceNowIncidentDataAutomation:
                 response.raise_for_status()
 
                 result = response.json()["result"]
-                print(f"Assignment group '{group_name}' created (sys_id: {result['sys_id']})")
-                created.append({
-                    "name": group_name,
-                    "sys_id": result["sys_id"],
-                    "status": "created",
-                })
+                print(
+                    f"Assignment group '{group_name}' created (sys_id: {result['sys_id']})"
+                )
+                created.append(
+                    {
+                        "name": group_name,
+                        "sys_id": result["sys_id"],
+                        "status": "created",
+                    }
+                )
 
             except requests.RequestException as e:
                 print(f"Error creating group '{group_name}': {e}")
@@ -108,9 +102,36 @@ class ServiceNowIncidentDataAutomation:
 
         return ""
 
+    _SAMPLE_SHORT_DESC = (
+        "[Bootstrap Test] Edge cluster nginx OOMKilled — auto-remediation " "validation"
+    )
+
+    def _sample_incident_exists(self) -> bool:
+        """Check if the bootstrap sample incident already exists.
+
+        Raises on connectivity/auth errors so they aren't masked.
+        """
+        url = f"{self.instance_url}/api/now/table/incident"
+        params = {
+            "sysparm_query": f"short_description={self._SAMPLE_SHORT_DESC}",
+            "sysparm_fields": "sys_id",
+            "sysparm_limit": "1",
+        }
+        response = self.session.get(url, params=params)
+        response.raise_for_status()
+        return len(response.json().get("result", [])) > 0
+
     def create_sample_incident(self) -> Dict[str, Any]:
-        """Create a sample incident to verify the setup works."""
+        """Create a sample incident to verify the setup works.
+
+        Idempotent — skips creation if the bootstrap test incident
+        already exists.
+        """
         print("Creating sample incident...")
+
+        if self._sample_incident_exists():
+            print("Sample bootstrap incident already exists, skipping")
+            return {"status": "exists"}
 
         categories = self.incident_config.get("categories", {})
         category = next(iter(categories), "Infrastructure")
@@ -123,10 +144,7 @@ class ServiceNowIncidentDataAutomation:
         caller_sys_id = self._resolve_caller_sys_id()
 
         payload: Dict[str, Any] = {
-            "short_description": (
-                "[Bootstrap Test] Edge cluster nginx OOMKilled — auto-remediation "
-                "validation"
-            ),
+            "short_description": self._SAMPLE_SHORT_DESC,
             "description": (
                 "This is a test incident created by the servicenow-bootstrap script "
                 "to validate that the NOC Agent user can create, read, update, and "
@@ -190,9 +208,7 @@ class ServiceNowIncidentDataAutomation:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Create ServiceNow incident test data"
-    )
+    parser = argparse.ArgumentParser(description="Create ServiceNow incident test data")
     parser.add_argument("--config", required=True, help="Path to configuration file")
     args = parser.parse_args()
 
@@ -205,10 +221,10 @@ def main() -> None:
 
     except FileNotFoundError:
         print(f"Configuration file not found: {args.config}")
+        sys.exit(1)
     except json.JSONDecodeError:
         print(f"Invalid JSON in configuration file: {args.config}")
-    except Exception as e:
-        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

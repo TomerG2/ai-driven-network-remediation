@@ -127,7 +127,15 @@ def wake_up_instance(
             )
 
         except Exception as e:
-            logging.error(f"Error during wake-up process: {e}")
+            debug_path = "debug-wake-up.png"
+            try:
+                page.screenshot(path=debug_path)
+                logging.error(
+                    f"Error during wake-up process: {e}  "
+                    f"(screenshot saved to {debug_path})"
+                )
+            except Exception:
+                logging.error(f"Error during wake-up process: {e}")
             raise
 
         finally:

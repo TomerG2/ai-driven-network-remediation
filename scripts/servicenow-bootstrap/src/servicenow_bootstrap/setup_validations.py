@@ -12,23 +12,18 @@ from typing import Any, Dict, Optional, Tuple
 
 import requests
 
-from .utils import get_env_var
+from .servicenow_client import ServiceNowClient
 
 
-class ServiceNowIncidentTester:
+class ServiceNowIncidentTester(ServiceNowClient):
     """Validate incident table CRUD using NOC Agent credentials."""
 
-    def __init__(self) -> None:
-        self.instance_url = get_env_var("SERVICENOW_INSTANCE_URL").rstrip("/")
-        self.username = get_env_var("SERVICENOW_USERNAME")
-        self.password = get_env_var("SERVICENOW_PASSWORD")
-
-        self.session = requests.Session()
-        self.session.auth = (self.username, self.password)
-        self.session.headers.update(
-            {"Content-Type": "application/json", "Accept": "application/json"}
-        )
-
+    def __init__(
+        self,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ) -> None:
+        super().__init__(username=username, password=password)
         self._created_sys_id: Optional[str] = None
         self._created_number: Optional[str] = None
 
@@ -46,14 +41,7 @@ class ServiceNowIncidentTester:
         url = f"{self.instance_url}/api/now/{endpoint}"
 
         try:
-            if method.upper() == "GET":
-                response = self.session.get(url)
-            elif method.upper() == "POST":
-                response = self.session.post(url, json=data)
-            elif method.upper() == "PATCH":
-                response = self.session.patch(url, json=data)
-            else:
-                return False, {}, f"Unsupported HTTP method: {method}"
+            response = self.session.request(method.upper(), url, json=data)
 
             if 200 <= response.status_code < 300:
                 try:
@@ -85,9 +73,7 @@ class ServiceNowIncidentTester:
             "impact": "4",
         }
 
-        success, data, error = self._make_request(
-            "POST", "table/incident", payload
-        )
+        success, data, error = self._make_request("POST", "table/incident", payload)
 
         if success:
             result = data.get("result", {})
@@ -120,7 +106,10 @@ class ServiceNowIncidentTester:
                 desc = results[0].get("short_description", "")
                 return True, f"  READ passed — found '{desc}'"
             else:
-                return False, f"  READ failed — incident {self._created_number} not found in results"
+                return (
+                    False,
+                    f"  READ failed — incident {self._created_number} not found in results",
+                )
         else:
             return False, f"  READ failed — {error}"
 
@@ -191,6 +180,19 @@ class ServiceNowIncidentTester:
         else:
             return False, f"  CALLER failed — {error}"
 
+    def _cleanup_incident(self) -> None:
+        """Delete the validation incident so repeated runs don't accumulate."""
+        if not self._created_sys_id:
+            return
+        print("Cleaning up validation incident...")
+        success, _, error = self._make_request(
+            "DELETE", f"table/incident/{self._created_sys_id}"
+        )
+        if success:
+            print(f"  Deleted {self._created_number}")
+        else:
+            print(f"  Cleanup failed (non-fatal): {error}")
+
     def run_all_tests(self) -> Dict[str, Tuple[bool, str]]:
         """Run the full incident CRUD validation suite."""
         print("=" * 60)
@@ -250,6 +252,8 @@ class ServiceNowIncidentTester:
                 "\nAll tests failed. Verify credentials, roles (itil, rest_service), "
                 "and API access policies."
             )
+
+        self._cleanup_incident()
 
         return results
 

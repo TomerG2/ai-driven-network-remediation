@@ -64,6 +64,7 @@ secrets/
 *.key
 *.pem
 *.crt
+.servicenow-creds.json
 
 # Local cluster configs
 configs/hub/env.sh

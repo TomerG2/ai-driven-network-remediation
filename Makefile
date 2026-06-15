@@ -437,16 +437,16 @@ deps-servicenow-bootstrap:
 	cd $(SERVICENOW_BOOTSTRAP_DIR) && uv sync
 
 .PHONY: servicenow-wake-install
-servicenow-wake-install: deps-servicenow-bootstrap
-	cd $(SERVICENOW_BOOTSTRAP_DIR) && uv run playwright install chromium
+servicenow-wake-install:
+	cd $(SERVICENOW_BOOTSTRAP_DIR) && uv sync --group wake && uv run playwright install chromium
 
 .PHONY: servicenow-wake
-servicenow-wake: deps-servicenow-bootstrap
-	cd $(SERVICENOW_BOOTSTRAP_DIR) && uv run python -m servicenow_bootstrap.wake_up_pdi
+servicenow-wake:
+	cd $(SERVICENOW_BOOTSTRAP_DIR) && uv sync --group wake && uv run python -m servicenow_bootstrap.wake_up_pdi
 
 .PHONY: servicenow-bootstrap
 servicenow-bootstrap: deps-servicenow-bootstrap
-	cd $(SERVICENOW_BOOTSTRAP_DIR) && uv run python -m servicenow_bootstrap.setup --config config.json
+	cd $(SERVICENOW_BOOTSTRAP_DIR) && uv run python -m servicenow_bootstrap.orchestrator --config config.json
 
 .PHONY: servicenow-bootstrap-validate
 servicenow-bootstrap-validate: deps-servicenow-bootstrap

@@ -529,7 +529,6 @@ name = "servicenow-bootstrap"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "playwright" },
     { name = "requests" },
 ]
 
@@ -541,12 +540,12 @@ dev = [
     { name = "pytest" },
     { name = "types-requests" },
 ]
+wake = [
+    { name = "playwright" },
+]
 
 [package.metadata]
-requires-dist = [
-    { name = "playwright", specifier = ">=1.40.0" },
-    { name = "requests", specifier = ">=2.25.0" },
-]
+requires-dist = [{ name = "requests", specifier = ">=2.25.0" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -556,6 +555,7 @@ dev = [
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "types-requests", specifier = ">=2.32.4.20250913" },
 ]
+wake = [{ name = "playwright", specifier = ">=1.40.0" }]
 
 [[package]]
 name = "types-requests"
