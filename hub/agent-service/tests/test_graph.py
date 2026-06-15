@@ -39,6 +39,24 @@ class TestGraphCompilation:
         node_names = {n.name for n in graph.get_graph().nodes.values()}
         assert "lightspeed" in node_names
 
+    def test_graph_has_audit_node(self):
+        graph = build_graph()
+        node_names = {n.name for n in graph.get_graph().nodes.values()}
+        assert "audit" in node_names
+
+    def test_audit_is_terminal_node_before_end(self):
+        graph = build_graph()
+        g = graph.get_graph()
+        end_sources = [e.source for e in g.edges if e.target == "__end__"]
+        assert end_sources == ["audit"]
+
+    def test_notify_connects_to_audit_not_end(self):
+        graph = build_graph()
+        g = graph.get_graph()
+        notify_targets = [e.target for e in g.edges if e.source == "notify"]
+        assert "audit" in notify_targets
+        assert "__end__" not in notify_targets
+
     def test_graph_has_no_request_approval_node(self):
         graph = build_graph()
         node_names = {n.name for n in graph.get_graph().nodes.values()}
@@ -159,25 +177,33 @@ class TestCli:
         result = runner.invoke(main)
 
         assert result.exit_code == 0
-        assert "'decision': 'remediate'" in result.output
+        assert "next_action: remediate" in result.output
+        assert "rca:" in result.output
 
     def test_low_confidence_routes_to_escalate(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--confidence", "0.5"])
 
         assert result.exit_code == 0
-        assert "'decision': 'escalate'" in result.output
+        assert "next_action: escalate" in result.output
 
     def test_lightspeed_route_via_failure_type(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--failure-type", "KafkaLag"])
 
         assert result.exit_code == 0
-        assert "'decision': 'lightspeed'" in result.output
+        assert "next_action: lightspeed" in result.output
 
     def test_mid_confidence_routes_to_escalate(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--confidence", "0.75"])
 
         assert result.exit_code == 0
-        assert "'decision': 'escalate'" in result.output
+        assert "next_action: escalate" in result.output
+
+    def test_cli_output_shows_incident_id(self):
+        runner = CliRunner()
+        result = runner.invoke(main)
+
+        assert result.exit_code == 0
+        assert "incident_id:" in result.output

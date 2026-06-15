@@ -87,6 +87,16 @@ class TestIncidentState:
         assert state.analysis_tokens_used == 0
         assert state.analysis_latency_ms == 0.0
 
+    def test_integration_ready_fields_have_defaults(self):
+        state = IncidentState(raw_event="pod crashloop")
+        assert state.pod_status == {}
+        assert state.recent_errors == []
+        assert state.slack_thread_ts == ""
+        assert state.servicenow_ticket == ""
+        assert state.langfuse_trace_id == ""
+        assert state.total_duration_ms == 0.0
+        assert state.error_message == ""
+
     def test_state_with_log_event(self):
         event = LogEvent(
             timestamp="2024-01-01T00:00:00Z",

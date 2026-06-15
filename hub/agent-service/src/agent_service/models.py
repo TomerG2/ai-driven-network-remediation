@@ -74,3 +74,10 @@ class IncidentState(BaseModel):
     analysis_latency_ms: float = 0.0
     decision: str = ""
     remediation_result: Optional[RemediationResult] = None
+    pod_status: dict = {}
+    recent_errors: list[dict] = []
+    slack_thread_ts: str = ""
+    servicenow_ticket: str = ""
+    langfuse_trace_id: str = ""
+    total_duration_ms: float = 0.0
+    error_message: str = ""

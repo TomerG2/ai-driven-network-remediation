@@ -6,6 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from agent_service.models import GraphConfig, IncidentState
 from agent_service.nodes import (
     analyze_node,
+    audit_node,
     escalate_node,
     lightspeed_node,
     normalize_node,
@@ -34,6 +35,7 @@ def build_graph(config: Optional[GraphConfig] = None):
     graph.add_node("lightspeed", lightspeed_node)
     graph.add_node("escalate", escalate_node)
     graph.add_node("notify", notify_node)
+    graph.add_node("audit", audit_node)
 
     graph.add_edge(START, "normalize")
     graph.add_edge("normalize", "rag_retrieval")
@@ -47,7 +49,8 @@ def build_graph(config: Optional[GraphConfig] = None):
     graph.add_edge("remediate", "notify")
     graph.add_edge("lightspeed", "notify")
     graph.add_edge("escalate", "notify")
-    graph.add_edge("notify", END)
+    graph.add_edge("notify", "audit")
+    graph.add_edge("audit", END)
 
     return graph.compile()
 
