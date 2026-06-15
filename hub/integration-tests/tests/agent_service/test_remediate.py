@@ -12,6 +12,13 @@ INCIDENT_STATE_FIELDS = {
     "analysis_latency_ms",
     "decision",
     "remediation_result",
+    "pod_status",
+    "recent_errors",
+    "slack_thread_ts",
+    "servicenow_ticket",
+    "langfuse_trace_id",
+    "total_duration_ms",
+    "error_message",
 }
 
 
