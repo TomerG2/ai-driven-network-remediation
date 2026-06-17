@@ -16,10 +16,6 @@ def test_models_list_not_empty(ingestion_client):
     assert len(data["models"]) > 0
 
 
-@pytest.mark.skipif(
-    not os.environ.get("GITHUB_ACTIONS"),
-    reason="adnr-llm model only provisioned in CI",
-)
 def test_adnr_llm_model_registered(ingestion_client):
     response = ingestion_client.get("/models")
     assert response.status_code == 200
