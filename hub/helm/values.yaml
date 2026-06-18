@@ -88,6 +88,8 @@ chatbotService:
     mcpAapUrl: "http://mcp-noc-aap:8000"
     mcpSlackUrl: "http://mcp-noc-slack:8000"
     mcpServicenowUrl: "http://mcp-noc-servicenow:8000"
+    # TODO: When real ServiceNow credentials are wired, use Secret references
+    # (secretKeyRef) rather than plain env values for username/password/API key.
     servicenowUrl: "http://servicenow-mock:8080"
     kafkaBootstrap: "kafka:9092"
     modelApiUrl: "http://llamastack:8321/v1/completions"
@@ -103,9 +105,9 @@ chatbotService:
     periodSeconds: 10
   readinessProbe:
     httpGet:
-      path: /health
+      path: /ready
       port: 8080
-    initialDelaySeconds: 5
+    initialDelaySeconds: 10
     periodSeconds: 10
 
 agentService:

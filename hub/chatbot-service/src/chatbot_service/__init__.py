@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -21,7 +22,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ app.add_middleware(
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=1000)
     session_id: str | None = None
 
 
@@ -76,10 +77,11 @@ class DemoTriggerRequest(BaseModel):
 
 async def _build_integrations() -> dict[str, Any]:
     """Probe all services and compute SLO/incident data."""
+    probes = await asyncio.gather(*(probe_http(t["probe_url"]) for t in INTEGRATION_TARGETS))
+
     integrations: list[dict[str, Any]] = []
     up_count = 0
-    for target in INTEGRATION_TARGETS:
-        probe = await probe_http(target["probe_url"])
+    for target, probe in zip(INTEGRATION_TARGETS, probes):
         if probe["status"] == "up":
             up_count += 1
         integrations.append({
@@ -90,7 +92,7 @@ async def _build_integrations() -> dict[str, Any]:
             "http_code": probe["http_code"],
         })
 
-    audits = fetch_recent_audits()
+    audits = await asyncio.to_thread(fetch_recent_audits)
     slo = compute_slo_metrics(audits, up_count, len(integrations))
     movie, impact = build_incident_movie(audits, slo)
 
@@ -127,6 +129,26 @@ def health() -> dict:
     return {"status": "ok", "service": "noc-chatbot-bff", "version": APP_VERSION}
 
 
+@app.get("/ready")
+async def ready():
+    """Readiness probe — verifies Kafka and ServiceNow are reachable."""
+    from .config import KAFKA_BOOTSTRAP, SERVICENOW_URL
+
+    checks: dict[str, bool] = {}
+
+    kafka_probe = await probe_http(f"http://{KAFKA_BOOTSTRAP.split(',')[0]}", timeout=2.0)
+    checks["kafka"] = kafka_probe["reachable"] or kafka_probe["http_code"] is not None
+
+    sn_probe = await probe_http(SERVICENOW_URL, timeout=2.0)
+    checks["servicenow"] = sn_probe["reachable"]
+
+    all_ready = all(checks.values())
+    content = {"status": "ready" if all_ready else "unavailable", "checks": checks}
+    if not all_ready:
+        return JSONResponse(status_code=503, content=content)
+    return content
+
+
 @app.get("/api/summary")
 async def summary() -> dict:
     tickets, servicenow_state = await fetch_servicenow_incident_count()
@@ -149,7 +171,7 @@ async def integrations_endpoint(force_refresh: bool = False) -> dict:
 async def trigger_demo(req: DemoTriggerRequest) -> dict:
     event = build_demo_event(req.scenario, req.site)
     try:
-        offset = publish_demo_event(event)
+        offset = await asyncio.to_thread(publish_demo_event, event)
     except Exception as exc:
         logger.exception("Failed to publish demo event for scenario=%s", req.scenario)
         return JSONResponse(status_code=502, content={
