@@ -40,7 +40,11 @@ async def probe_http(url: str, timeout: float = 4.0) -> dict[str, Any]:
 
 
 async def fetch_servicenow_incident_count() -> tuple[int, str]:
-    """Get open incident count from ServiceNow (real or mock)."""
+    """Get open incident count from ServiceNow (real or mock).
+
+    NOTE: Direct HTTP for now (single query). Consider a ServiceNow SDK or
+    dedicated client wrapper if we expand to creating/updating tickets or CMDB queries.
+    """
     try:
         async with httpx.AsyncClient(timeout=8.0, verify=SSL_VERIFY) as client:
             if is_real_servicenow():
