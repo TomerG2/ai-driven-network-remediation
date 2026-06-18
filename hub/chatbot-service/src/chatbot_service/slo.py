@@ -112,6 +112,7 @@ def compute_slo_metrics(records: list[dict[str, Any]], up_count: int, total_coun
                 aap_success += 1
 
     mttr = statistics.mean(durations) if durations else None
+    # Synthetic estimate — real MTTD requires separate detection timestamps from the agent
     mttd = statistics.mean([max(1.0, d * 0.2) for d in durations]) if durations else None
     p95 = (
         statistics.quantiles(durations, n=20)[18]
@@ -188,6 +189,7 @@ def build_incident_movie(records: list[dict[str, Any]], slo: dict[str, Any]) -> 
 
     total = len(records)
     mttr = float(slo.get("mttr_seconds") or 0)
+    # Placeholder: assumes 15-min manual MTTR baseline; replace with real org data when available
     baseline_manual_mttr = 900.0
     per_incident_saved = max(0.0, baseline_manual_mttr - mttr)
     total_seconds_saved = per_incident_saved * auto_resolved
@@ -198,6 +200,7 @@ def build_incident_movie(records: list[dict[str, Any]], slo: dict[str, Any]) -> 
         "tickets_avoided": auto_resolved,
         "escalated_tickets": escalated,
         "hours_returned_to_ops": round(total_seconds_saved / 3600.0, 2),
+        # Placeholder cost rate — adjust to actual blended ops rate
         "estimated_cost_saved_usd": round((total_seconds_saved / 3600.0) * 120.0, 2),
         "model_confidence_avg": round(statistics.mean(confidence_vals), 3) if confidence_vals else None,
     }
