@@ -11,6 +11,7 @@ dependencies = [
     "click>=8.1.0",
     "fastapi>=0.115",
     "langgraph>=1.0.0",
+    "llama-stack-client>=0.7.4",
     "loguru>=0.7.0",
     "pydantic>=2.0.0",
     "uvicorn>=0.34",
@@ -31,4 +32,5 @@ testpaths = ["tests"]
 dev = [
     "httpx2>=0.1",
     "pytest>=7.4.0",
+    "pytest-asyncio>=1.4.0",
 ]
