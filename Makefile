@@ -68,6 +68,25 @@ AAP_MOCK_IMG           := $(REGISTRY)/noc-aap-mock:$(VERSION)
 ENABLE_SERVICENOW_MOCK ?= true
 SERVICENOW_MOCK_IMG    := $(REGISTRY)/noc-servicenow-mock:$(VERSION)
 
+CORE_BUILD_PUSH_IMAGES := \
+	$(CHATBOT_IMG) \
+	$(INGESTION_IMG) \
+	$(AGENT_IMG) \
+	$(MCP_OPENSHIFT_IMG) \
+	$(MCP_LOKISTACK_IMG) \
+	$(MCP_KAFKA_IMG) \
+	$(MCP_AAP_IMG) \
+	$(MCP_SLACK_IMG) \
+	$(MCP_SERVICENOW_IMG)
+
+EXTRA_BUILD_PUSH_IMAGES := \
+	$(AAP_MOCK_IMG) \
+	$(SERVICENOW_MOCK_IMG)
+
+ALL_BUILD_PUSH_IMAGES := \
+	$(CORE_BUILD_PUSH_IMAGES) \
+	$(EXTRA_BUILD_PUSH_IMAGES)
+
 ADNR_LLM_ENABLED := $(and $(ADNR_LLM_ID),$(ADNR_LLM_URL),$(ADNR_LLM_TOKEN))
 
 helm_adnr_llm_args = \
@@ -134,6 +153,10 @@ push-all-images:
 	$(CONTAINER_TOOL) push $(MCP_AAP_IMG) $(PUSH_EXTRA_ARGS)
 	$(CONTAINER_TOOL) push $(MCP_SLACK_IMG) $(PUSH_EXTRA_ARGS)
 	$(CONTAINER_TOOL) push $(MCP_SERVICENOW_IMG) $(PUSH_EXTRA_ARGS)
+
+.PHONY: print-all-images
+print-all-images:
+	@printf '%s\n' $(ALL_BUILD_PUSH_IMAGES)
 
 .PHONY: build-push-aap-mock
 build-push-aap-mock:
