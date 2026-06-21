@@ -20,8 +20,11 @@ from .utils import parse_iso
 logger = logging.getLogger(__name__)
 
 
-def fetch_recent_audits() -> list[dict[str, Any]]:
-    """Read recent incident-audit records from Kafka using seek-to-end."""
+def fetch_recent_audits() -> tuple[list[dict[str, Any]], bool]:
+    """Read recent incident-audit records from Kafka using seek-to-end.
+
+    Returns (records, kafka_reachable).
+    """
     from kafka import KafkaConsumer
 
     records: list[dict[str, Any]] = []
@@ -36,14 +39,14 @@ def fetch_recent_audits() -> list[dict[str, Any]]:
         )
     except Exception:
         logger.warning("Failed to connect to Kafka at %s", KAFKA_BOOTSTRAP, exc_info=True)
-        return records
+        return records, False
 
     try:
         consumer.poll(timeout_ms=800)
         partitions = consumer.assignment()
         if not partitions:
             logger.debug("No partitions assigned for topic %s", AUDIT_TOPIC)
-            return records
+            return records, True
 
         max_per_partition = max(50, AUDIT_MAX_MESSAGES // max(1, len(partitions)))
         for tp in partitions:
@@ -68,10 +71,11 @@ def fetch_recent_audits() -> list[dict[str, Any]]:
                 break
     except Exception:
         logger.exception("Error consuming from Kafka topic %s", AUDIT_TOPIC)
+        return records, False
     finally:
         consumer.close()
     logger.info("Fetched %d audit records from %s", len(records), AUDIT_TOPIC)
-    return records
+    return records, True
 
 
 def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, Any]:
