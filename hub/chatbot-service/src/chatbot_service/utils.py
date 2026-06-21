@@ -27,3 +27,15 @@ def normalize_session_id(session_id: str | None) -> str:
 def get_mcp_items(integrations_data: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract MCP-group integrations from the integrations payload."""
     return [i for i in integrations_data.get("integrations", []) if i.get("group") == "mcp"]
+
+
+def build_deps(checks: dict[str, bool]) -> dict[str, Any]:
+    """Build the _deps envelope from named dependency checks.
+
+    checks: {"kafka": True, "servicenow": False, "llm": True}
+    returns: {"status": "ok"} or {"status": "degraded", "unavailable": ["servicenow"]}
+    """
+    unavailable = [name for name, ok in checks.items() if not ok]
+    if not unavailable:
+        return {"status": "ok"}
+    return {"status": "degraded", "unavailable": sorted(unavailable)}
