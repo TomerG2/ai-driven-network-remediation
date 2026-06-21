@@ -11,6 +11,7 @@ ROUTES_ENABLED  ?= true
 CHATBOT_IMG        := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 INGESTION_IMG      := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
 AGENT_IMG          := $(REGISTRY)/noc-agent-service:$(VERSION)
+FRONTEND_IMG       := $(REGISTRY)/noc-frontend:$(VERSION)
 MCP_OPENSHIFT_IMG  := $(REGISTRY)/noc-mcp-openshift:$(VERSION)
 MCP_LOKISTACK_IMG  := $(REGISTRY)/noc-mcp-lokistack:$(VERSION)
 MCP_KAFKA_IMG      := $(REGISTRY)/noc-mcp-kafka:$(VERSION)
@@ -79,6 +80,7 @@ CORE_BUILD_PUSH_IMAGES := \
 	$(CHATBOT_IMG) \
 	$(INGESTION_IMG) \
 	$(AGENT_IMG) \
+	$(FRONTEND_IMG) \
 	$(MCP_OPENSHIFT_IMG) \
 	$(MCP_LOKISTACK_IMG) \
 	$(MCP_KAFKA_IMG) \
@@ -135,7 +137,7 @@ helm_lokistack_registration_args = \
 	$(if $(filter true,$(ENABLE_LOKISTACK)),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
 
 .PHONY: build-all-images
-build-all-images: build-chatbot-image build-agent-image build-mcp-images
+build-all-images: build-chatbot-image build-agent-image build-frontend-image build-mcp-images
 
 .PHONY: build-chatbot-image
 build-chatbot-image:
@@ -145,6 +147,10 @@ build-chatbot-image:
 .PHONY: build-agent-image
 build-agent-image:
 	$(CONTAINER_TOOL) build -t $(AGENT_IMG) --platform=$(ARCH) -f hub/agent-service/Containerfile hub/agent-service
+
+.PHONY: build-frontend-image
+build-frontend-image:
+	$(CONTAINER_TOOL) build -t $(FRONTEND_IMG) --platform=$(ARCH) -f hub/frontend/Containerfile hub/frontend
 
 .PHONY: build-mcp-images
 build-mcp-images:
@@ -241,6 +247,7 @@ ifeq ($(ENABLE_HUB),true)
 		--set image.chatbotService=noc-chatbot-service \
 		--set image.ingestionPipeline=noc-ingestion-pipeline \
 		--set image.agentService=noc-agent-service \
+		--set image.frontend=noc-frontend \
 		--set global.routes.enabled=$(ROUTES_ENABLED) \
 		--set image.tag=$(VERSION) \
 		$(helm_mcp_image_args) \

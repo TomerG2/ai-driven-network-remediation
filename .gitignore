@@ -75,6 +75,7 @@ configs/**/*.real.yaml
 dist/
 build/
 *.egg-info/
+node_modules/
 
 # OpenShift local files
 kubeconfig
