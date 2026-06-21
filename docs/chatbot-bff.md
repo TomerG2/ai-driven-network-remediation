@@ -1,6 +1,6 @@
 # Chatbot BFF — API Backend for NOC Dashboard
 
-**Milestone:** V1 | **Tasks:** #14, #15 | **Updated:** Jun 18, 2026
+**Milestone:** V1 | **Tasks:** #14, #15 | **Updated:** Jun 21, 2026
 
 ---
 
@@ -32,6 +32,34 @@ Communication with the agent is **Kafka-only**:
 
 ## API Contract
 
+### Dependency Status Envelope (`_deps`)
+
+All data endpoints (`/api/*`) include a `_deps` field that reports whether the backend dependencies required by that endpoint were reachable. This allows consumers to distinguish "zero data" from "dependency unavailable" with a single consistent check.
+
+```jsonc
+// All deps healthy — data is complete
+{"_deps": {"status": "ok"}, ...}
+
+// Some deps unavailable — data is partial/fallback
+{"_deps": {"status": "degraded", "unavailable": ["kafka", "servicenow"]}, ...}
+```
+
+| Endpoint | `_deps.status: "ok"` when | `_deps.status: "degraded"` when | HTTP 502 when |
+|---|---|---|---|
+| `GET /api/summary` | ServiceNow responded | ServiceNow unreachable | — |
+| `GET /api/integrations` | All probes + Kafka ok | Any probe down or Kafka unreachable | — |
+| `POST /api/chat` | LLM responded | LLM unreachable (fallback reply) | — |
+| `POST /api/demo/trigger` | Kafka published | — | Kafka down (already correct) |
+
+Infrastructure probes (`/health`, `/ready`) do **not** include `_deps`.
+
+Frontend usage:
+```js
+if (data._deps.status === "degraded") {
+  showBanner(data._deps.unavailable);
+}
+```
+
 ### `GET /health`
 Liveness probe. Always returns 200.
 ```json
@@ -47,6 +75,7 @@ Readiness probe. Always returns 200 (the BFF gracefully degrades when deps are d
 ### `GET /api/summary`
 ```json
 {
+  "_deps": {"status": "ok"},
   "timestamp": "2026-06-18T10:00:00+00:00",
   "agent_status": "running",
   "cluster": "hub",
@@ -60,6 +89,7 @@ Readiness probe. Always returns 200 (the BFF gracefully degrades when deps are d
 Cached (10s TTL). Probes run in parallel.
 ```json
 {
+  "_deps": {"status": "degraded", "unavailable": ["probes"]},
   "timestamp": "...",
   "total": 7,
   "up": 6,
@@ -88,6 +118,7 @@ Cached (10s TTL). Probes run in parallel.
 **Response:**
 ```json
 {
+  "_deps": {"status": "ok"},
   "session_id": "uuid",
   "timestamp": "...",
   "reply": "Summary:\n- Site: edge-01 | Open incidents: 0\n...",
@@ -116,6 +147,7 @@ Cached (10s TTL). Probes run in parallel.
 **Response (200):**
 ```json
 {
+  "_deps": {"status": "ok"},
   "timestamp": "...",
   "status": "queued",
   "incident_id": "uuid",
@@ -207,7 +239,7 @@ make helm-install REGISTRY=quay.io/rh-ee-mtalvi
 
 | Type | Count | Result | Command |
 |------|-------|--------|---------|
-| Unit | 22 | All passed | `cd hub/chatbot-service && uv run pytest tests/ -v -o "addopts="` |
+| Unit | 29 | All passed | `cd hub/chatbot-service && uv run pytest tests/ -v -o "addopts="` |
 | Integration (chatbot) | 6 | All passed | `make integration-tests` |
 | Integration (full suite) | 58 | 42 passed, 3 failed, 13 skipped | `make integration-tests` |
 

@@ -20,6 +20,7 @@ def test_summary(mock_snow, client):
     resp = client.get("/api/summary")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["_deps"] == {"status": "ok"}
     assert data["agent_status"] == "running"
     assert data["cluster"] == "hub"
     assert data["site"] == "edge-01"
@@ -28,14 +29,25 @@ def test_summary(mock_snow, client):
     assert "timestamp" in data
 
 
+@patch("chatbot_service.fetch_servicenow_incident_count", new_callable=AsyncMock)
+def test_summary_servicenow_unreachable(mock_snow, client):
+    mock_snow.return_value = (0, {"mode": "mock", "reachable": False})
+    resp = client.get("/api/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["_deps"] == {"status": "degraded", "unavailable": ["servicenow"]}
+    assert data["open_incidents"] == 0
+
+
 @patch("chatbot_service.fetch_recent_audits")
 @patch("chatbot_service.probe_http", new_callable=AsyncMock)
 def test_integrations(mock_probe, mock_audits, client):
     mock_probe.return_value = {"status": "up", "http_code": 200, "reachable": True}
-    mock_audits.return_value = []
+    mock_audits.return_value = ([], True)
     resp = client.get("/api/integrations")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["_deps"] == {"status": "ok"}
     assert data["total"] == 7
     assert data["up"] == 7
     assert data["down"] == 0
@@ -55,12 +67,25 @@ def test_integrations_with_down_service(mock_probe, mock_audits, client):
         return {"status": "up", "http_code": 200, "reachable": True}
 
     mock_probe.side_effect = side_effect
-    mock_audits.return_value = []
+    mock_audits.return_value = ([], True)
     resp = client.get("/api/integrations?force_refresh=true")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["_deps"] == {"status": "degraded", "unavailable": ["probes"]}
     assert data["up"] == 6
     assert data["down"] == 1
+
+
+@patch("chatbot_service.fetch_recent_audits")
+@patch("chatbot_service.probe_http", new_callable=AsyncMock)
+def test_integrations_kafka_unreachable(mock_probe, mock_audits, client):
+    mock_probe.return_value = {"status": "up", "http_code": 200, "reachable": True}
+    mock_audits.return_value = ([], False)
+    resp = client.get("/api/integrations?force_refresh=true")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["_deps"] == {"status": "degraded", "unavailable": ["kafka"]}
+    assert data["up"] == 7
 
 
 @patch("chatbot_service.publish_demo_event")
@@ -69,6 +94,7 @@ def test_demo_trigger(mock_publish, client):
     resp = client.post("/api/demo/trigger", json={"scenario": "oom", "site": "edge-01"})
     assert resp.status_code == 200
     data = resp.json()
+    assert data["_deps"] == {"status": "ok"}
     assert data["status"] == "queued"
     assert data["scenario"] == "oom"
     assert data["kafka_offset"] == 42
@@ -83,6 +109,7 @@ def test_demo_trigger_crashloop(mock_publish, client):
     resp = client.post("/api/demo/trigger", json={"scenario": "crashloop", "site": "edge-01"})
     assert resp.status_code == 200
     data = resp.json()
+    assert data["_deps"] == {"status": "ok"}
     assert data["scenario"] == "crashloop"
     assert "CrashLoopBackOff" in data["event_message"]
 
@@ -103,6 +130,7 @@ def test_demo_trigger_kafka_failure(mock_publish, client):
 def test_chat(mock_model, mock_snow, mock_integrations, client):
     mock_snow.return_value = (1, {"mode": "mock", "reachable": True})
     mock_integrations.return_value = {
+        "_deps": {"status": "ok"},
         "total": 7,
         "up": 7,
         "down": 0,
@@ -118,6 +146,7 @@ def test_chat(mock_model, mock_snow, mock_integrations, client):
     resp = client.post("/api/chat", json={"message": "What happened?"})
     assert resp.status_code == 200
     data = resp.json()
+    assert data["_deps"] == {"status": "ok"}
     assert "reply" in data
     assert data["model"]["name"] == "granite-4-h-tiny"
     assert data["model"]["source"] == "live"
@@ -131,6 +160,7 @@ def test_chat(mock_model, mock_snow, mock_integrations, client):
 def test_chat_model_unavailable(mock_model, mock_snow, mock_integrations, client):
     mock_snow.return_value = (0, {"mode": "mock", "reachable": True})
     mock_integrations.return_value = {
+        "_deps": {"status": "ok"},
         "total": 7,
         "up": 5,
         "down": 2,
@@ -144,6 +174,7 @@ def test_chat_model_unavailable(mock_model, mock_snow, mock_integrations, client
     resp = client.post("/api/chat", json={"message": "Status?"})
     assert resp.status_code == 200
     data = resp.json()
+    assert data["_deps"] == {"status": "degraded", "unavailable": ["llm"]}
     assert "model unavailable" in data["reply"].lower() or "fallback" in data["reply"].lower()
     assert data["model"]["source"] == "unreachable"
 

@@ -8,6 +8,27 @@ from chatbot_service import (
     compute_slo_metrics,
     normalize_incident_record,
 )
+from chatbot_service.utils import build_deps
+
+
+class TestBuildDeps:
+    def test_all_ok(self):
+        assert build_deps({"kafka": True, "servicenow": True}) == {"status": "ok"}
+
+    def test_empty_checks(self):
+        assert build_deps({}) == {"status": "ok"}
+
+    def test_single_failure(self):
+        result = build_deps({"kafka": True, "servicenow": False})
+        assert result == {"status": "degraded", "unavailable": ["servicenow"]}
+
+    def test_multiple_failures_sorted(self):
+        result = build_deps({"llm": False, "kafka": False, "probes": True})
+        assert result == {"status": "degraded", "unavailable": ["kafka", "llm"]}
+
+    def test_all_down(self):
+        result = build_deps({"kafka": False, "servicenow": False})
+        assert result == {"status": "degraded", "unavailable": ["kafka", "servicenow"]}
 
 
 class TestNormalizeIncidentRecord:
