@@ -13,6 +13,21 @@ from agent_service.models import (
 )
 
 
+def _analyze_stub(state: dict) -> dict:
+    confidence = state.confidence_override if state.confidence_override is not None else 0.85
+    failure_type = state.failure_type_override if state.failure_type_override is not None else "CrashLoopBackOff"
+    rca = RootCauseAnalysis(
+        failure_type=failure_type,
+        confidence=confidence,
+        summary="stub summary",
+        evidence=["stub evidence"],
+        recommended_actions=["stub action"],
+        estimated_severity="medium",
+        runbook_reference="stub-runbook",
+    )
+    return {"root_cause_analysis": rca}
+
+
 def _make_analyze_stub(confidence: float, failure_type: str = "CrashLoopBackOff"):
     def analyze_node(state: dict) -> dict:
         rca = RootCauseAnalysis(
@@ -78,7 +93,8 @@ class TestGraphCompilation:
 
 class TestNormalizeNode:
     def test_normalize_produces_log_event(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             graph = build_graph()
             result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
         assert result["log_event"] is not None
@@ -88,13 +104,15 @@ class TestNormalizeNode:
 
 class TestRagRetrievalNode:
     def test_rag_retrieval_sets_rag_query_used(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             graph = build_graph()
             result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
         assert result["rag_query_used"] != ""
 
     def test_rag_retrieval_sets_context_snippets(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             graph = build_graph()
             result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
         assert len(result["context_snippets"]) > 0
@@ -102,7 +120,8 @@ class TestRagRetrievalNode:
 
 class TestLinearFlow:
     def test_end_to_end_produces_expected_state(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             graph = build_graph()
             result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
 
@@ -188,7 +207,8 @@ class TestConditionalRouting:
 
 class TestConfidenceOverride:
     def test_confidence_override_controls_routing(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             graph = build_graph()
             result = graph.invoke({"raw_event": "test event", "confidence_override": 0.5})
 
@@ -198,7 +218,8 @@ class TestConfidenceOverride:
 
 class TestCli:
     def test_default_confidence_routes_to_remediate(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             runner = CliRunner()
             result = runner.invoke(main)
 
@@ -207,7 +228,8 @@ class TestCli:
         assert "rca:" in result.output
 
     def test_low_confidence_routes_to_escalate(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             runner = CliRunner()
             result = runner.invoke(main, ["--confidence", "0.5"])
 
@@ -215,7 +237,8 @@ class TestCli:
         assert "next_action: escalate" in result.output
 
     def test_lightspeed_route_via_failure_type(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             runner = CliRunner()
             result = runner.invoke(main, ["--failure-type", "KafkaLag"])
 
@@ -223,7 +246,8 @@ class TestCli:
         assert "next_action: lightspeed" in result.output
 
     def test_mid_confidence_routes_to_escalate(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             runner = CliRunner()
             result = runner.invoke(main, ["--confidence", "0.75"])
 
@@ -231,7 +255,8 @@ class TestCli:
         assert "next_action: escalate" in result.output
 
     def test_cli_output_shows_incident_id(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
             runner = CliRunner()
             result = runner.invoke(main)
 

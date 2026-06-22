@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import click
@@ -41,5 +42,5 @@ def main(confidence: float, failure_type: str | None, draw_path: Path | None) ->
     invoke_input: dict = {"raw_event": "nginx CrashLoopBackOff in namespace prod", "confidence_override": confidence}
     if failure_type is not None:
         invoke_input["failure_type_override"] = failure_type
-    result = graph.invoke(invoke_input)
+    result = asyncio.run(graph.ainvoke(invoke_input))
     click.echo(_format_result(result))
