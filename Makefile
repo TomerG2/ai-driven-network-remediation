@@ -198,6 +198,19 @@ namespace:
 helm-depend:
 	cd hub/helm && helm dependency update
 
+.PHONY: check-adnr-llm-config
+check-adnr-llm-config:
+	@missing=""; \
+	[ -n "$(ADNR_LLM_ID)" ] || missing="$$missing ADNR_LLM_ID"; \
+	[ -n "$(ADNR_LLM_URL)" ] || missing="$$missing ADNR_LLM_URL"; \
+	[ -n "$(ADNR_LLM_TOKEN)" ] || missing="$$missing ADNR_LLM_TOKEN"; \
+	if [ -n "$$missing" ]; then \
+		echo "ERROR: Missing required ADNR LLM configuration:$$missing"; \
+		echo "Set ADNR_LLM_ID, ADNR_LLM_URL, and ADNR_LLM_TOKEN before running 'make helm-install'."; \
+		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
+		exit 1; \
+	fi
+
 .PHONY: helm-install
 helm-install: namespace helm-depend
 ifeq ($(ENABLE_KAFKA),true)
@@ -216,6 +229,7 @@ ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 	$(MAKE) deploy-servicenow-mock
 endif
 ifeq ($(ENABLE_HUB),true)
+	$(MAKE) check-adnr-llm-config
 	@oc get secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) > /dev/null 2>&1 || \
 		hub/mcp-servers/mcp-openshift/deploy/setup-edge-rbac.sh $(EDGE_NAMESPACE) $(NAMESPACE)
 	helm upgrade --install $(RELEASE) hub/helm \
