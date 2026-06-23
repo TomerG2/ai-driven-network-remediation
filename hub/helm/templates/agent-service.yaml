@@ -21,6 +21,11 @@ spec:
         - name: agent-service
           image: "{{ .Values.image.registry }}/{{ .Values.image.agentService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LLAMASTACK_HOST
+              value: {{ index .Values "llama-stack" "host" | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ index .Values "llama-stack" "port" | quote }}
           ports:
             - name: http
               containerPort: 8001
