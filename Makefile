@@ -62,13 +62,38 @@ MINIO_HELM_EXTRA_ARGS  ?=
 
 # ── AAP Mock (optional: ENABLE_AAP_MOCK=true) ──────────────────
 ENABLE_AAP_MOCK        ?= true
-AAP_MOCK_IMG           := $(REGISTRY)/aap-mock:$(VERSION)
+AAP_MOCK_IMG           := $(REGISTRY)/noc-aap-mock:$(VERSION)
 
 # ── ServiceNow Mock ──────────────────────────────────────────────
 ENABLE_SERVICENOW_MOCK ?= true
-SERVICENOW_MOCK_IMG    := $(REGISTRY)/servicenow-mock:$(VERSION)
+SERVICENOW_MOCK_IMG    := $(REGISTRY)/noc-servicenow-mock:$(VERSION)
+
+CORE_BUILD_PUSH_IMAGES := \
+	$(CHATBOT_IMG) \
+	$(INGESTION_IMG) \
+	$(AGENT_IMG) \
+	$(MCP_OPENSHIFT_IMG) \
+	$(MCP_LOKISTACK_IMG) \
+	$(MCP_KAFKA_IMG) \
+	$(MCP_AAP_IMG) \
+	$(MCP_SLACK_IMG) \
+	$(MCP_SERVICENOW_IMG)
+
+EXTRA_BUILD_PUSH_IMAGES := \
+	$(AAP_MOCK_IMG) \
+	$(SERVICENOW_MOCK_IMG)
+
+# `build-all-images` and `push-all-images` operate on the core images only.
+# The mock images are handled by the dedicated `build-push-*` targets below.
+ALL_BUILD_PUSH_IMAGES := \
+	$(CORE_BUILD_PUSH_IMAGES) \
+	$(EXTRA_BUILD_PUSH_IMAGES)
 
 ADNR_LLM_ENABLED := $(and $(ADNR_LLM_ID),$(ADNR_LLM_URL),$(ADNR_LLM_TOKEN))
+
+.PHONY: version
+version:
+	@echo $(VERSION)
 
 helm_adnr_llm_args = \
 	$(if $(ADNR_LLM_ENABLED),--set llama-stack.models.adnr-llm.enabled=true,) \
@@ -125,15 +150,13 @@ build-mcp-images:
 
 .PHONY: push-all-images
 push-all-images:
-	$(CONTAINER_TOOL) push $(CHATBOT_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(INGESTION_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(AGENT_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(MCP_OPENSHIFT_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(MCP_LOKISTACK_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(MCP_KAFKA_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(MCP_AAP_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(MCP_SLACK_IMG) $(PUSH_EXTRA_ARGS)
-	$(CONTAINER_TOOL) push $(MCP_SERVICENOW_IMG) $(PUSH_EXTRA_ARGS)
+	@for image in $(CORE_BUILD_PUSH_IMAGES); do \
+		$(CONTAINER_TOOL) push $$image $(PUSH_EXTRA_ARGS); \
+	done
+
+.PHONY: print-all-images
+print-all-images:
+	@printf '%s\n' $(CORE_BUILD_PUSH_IMAGES)
 
 .PHONY: build-push-aap-mock
 build-push-aap-mock:
@@ -171,6 +194,19 @@ namespace:
 helm-depend:
 	cd hub/helm && helm dependency update
 
+.PHONY: check-adnr-llm-config
+check-adnr-llm-config:
+	@missing=""; \
+	[ -n "$(ADNR_LLM_ID)" ] || missing="$$missing ADNR_LLM_ID"; \
+	[ -n "$(ADNR_LLM_URL)" ] || missing="$$missing ADNR_LLM_URL"; \
+	[ -n "$(ADNR_LLM_TOKEN)" ] || missing="$$missing ADNR_LLM_TOKEN"; \
+	if [ -n "$$missing" ]; then \
+		echo "ERROR: Missing required ADNR LLM configuration:$$missing"; \
+		echo "Set ADNR_LLM_ID, ADNR_LLM_URL, and ADNR_LLM_TOKEN before running 'make helm-install'."; \
+		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
+		exit 1; \
+	fi
+
 .PHONY: helm-install
 helm-install: namespace helm-depend
 ifeq ($(ENABLE_KAFKA),true)
@@ -189,6 +225,7 @@ ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 	$(MAKE) deploy-servicenow-mock
 endif
 ifeq ($(ENABLE_HUB),true)
+	$(MAKE) check-adnr-llm-config
 	@oc get secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) > /dev/null 2>&1 || \
 		hub/mcp-servers/mcp-openshift/deploy/setup-edge-rbac.sh $(EDGE_NAMESPACE) $(NAMESPACE)
 	helm upgrade --install $(RELEASE) hub/helm \
@@ -246,6 +283,9 @@ ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 	oc delete -n $(NAMESPACE) -f hub/infra/servicenow-mock/k8s.yaml --ignore-not-found
 endif
 endif
+	$(MAKE) edge-rbac-teardown
+	oc delete namespace $(EDGE_NAMESPACE) --ignore-not-found
+	oc delete namespace $(NAMESPACE) --ignore-not-found
 
 .PHONY: edge-rbac-teardown
 edge-rbac-teardown:

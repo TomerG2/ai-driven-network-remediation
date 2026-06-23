@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: aap-mock
-          image: localhost:5001/aap-mock:ci
+          image: localhost:5001/noc-aap-mock:ci
           ports:
             - containerPort: 8080
           readinessProbe:

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: servicenow-mock
-          image: localhost:5001/servicenow-mock:ci
+          image: localhost:5001/noc-servicenow-mock:ci
           ports:
             - containerPort: 8080
           env:

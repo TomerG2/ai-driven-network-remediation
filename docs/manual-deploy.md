@@ -1,16 +1,31 @@
 # Deploy to OpenShift
 
-0. [Optionally] Set environment variables
+0. Set environment variables
 
 $NAMESPACE default `hub`: namespace used to install the Hub
 $REGISTRY default `quay.io/rh-ai-quickstart`: Remote container registry
 $VERSION default `0.1.0`: Versions for all container images
 
-To expose the ADNR-backed Llama Stack model during `make helm-install`, also set:
+`make helm-install` and `make integration-tests` require the ADNR-backed Llama Stack model to be configured. Set:
 
 - `$ADNR_LLM_ID`: model identifier registered in Llama Stack
 - `$ADNR_LLM_URL`: remote OpenAI-compatible or vLLM endpoint
 - `$ADNR_LLM_TOKEN`: bearer token for that endpoint
+
+You can start from `.env.example` to populate these values for local development.
+
+RHPDS can be used to validate this flow. See
+[`APPENG-5217`](https://redhat.atlassian.net/browse/APPENG-5217) for the RHPDS
+environment and configure a model in MaaS there, or use any other compatible
+Model as a Service endpoint you prefer.
+
+Example:
+
+```bash
+export ADNR_LLM_ID='granite-3-2-8b-instruct'
+export ADNR_LLM_URL='https://litellm-prod.apps.maas.redhatworkshops.io/v1'
+export ADNR_LLM_TOKEN='your-api-token-from-RHPDS-MaaS'
+```
 
 1. Login to OpenShift remote cluster. For instance:
 
