@@ -34,7 +34,11 @@ class TestRemediateRouting:
     def test_high_confidence_remediates(self, agent_service_client):
         response = agent_service_client.post(
             "/remediate",
-            json={"raw_event": "high confidence event", "confidence_override": 0.9},
+            json={
+                "raw_event": "high confidence event",
+                "confidence_override": 0.9,
+                "failure_type_override": "CrashLoopBackOff",
+            },
         )
         _assert_valid_remediation_response(response, "high confidence event", "remediate")
 
@@ -52,13 +56,21 @@ class TestRemediateRouting:
     def test_mid_confidence_escalates(self, agent_service_client):
         response = agent_service_client.post(
             "/remediate",
-            json={"raw_event": "mid confidence event", "confidence_override": 0.75},
+            json={
+                "raw_event": "mid confidence event",
+                "confidence_override": 0.75,
+                "failure_type_override": "CrashLoopBackOff",
+            },
         )
         _assert_valid_remediation_response(response, "mid confidence event", "escalate")
 
     def test_low_confidence_escalates(self, agent_service_client):
         response = agent_service_client.post(
             "/remediate",
-            json={"raw_event": "low confidence event", "confidence_override": 0.5},
+            json={
+                "raw_event": "low confidence event",
+                "confidence_override": 0.5,
+                "failure_type_override": "CrashLoopBackOff",
+            },
         )
         _assert_valid_remediation_response(response, "low confidence event", "escalate")

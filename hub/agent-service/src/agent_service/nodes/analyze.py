@@ -39,6 +39,8 @@ async def analyze_node(state: dict) -> dict:
         rca = RootCauseAnalysis(
             failure_type=state.failure_type_override,
             confidence=state.confidence_override,
+            failure_type=failure_type,
+            confidence=confidence,
             summary="synthetic override",
             evidence=["override"],
             recommended_actions=["manual review"],
