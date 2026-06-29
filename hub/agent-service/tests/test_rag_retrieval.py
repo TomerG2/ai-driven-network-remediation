@@ -2,29 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_service.models import IncidentState, LogEvent
-
-
-def _make_log_event(**overrides):
-    defaults = dict(
-        timestamp="2024-01-01T00:00:00Z",
-        message="CrashLoopBackOff",
-        level="error",
-        namespace="prod",
-        pod_name="nginx-abc123",
-        container="nginx",
-        edge_site_id="edge-1",
-        kafka_offset=42,
-        raw="raw log line",
-    )
-    defaults.update(overrides)
-    return LogEvent(**defaults)
-
-
-def _make_state(**overrides):
-    defaults = dict(raw_event="some raw event", log_event=_make_log_event())
-    defaults.update(overrides)
-    return IncidentState(**defaults)
+from helpers import make_log_event, make_state
 
 
 class TestRagQueryConstruction:
@@ -40,7 +18,7 @@ class TestRagQueryConstruction:
              patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
-            state = _make_state()
+            state = make_state()
             result = await rag_retrieval_node(state)
 
         assert "CrashLoopBackOff" in result["rag_query_used"]
@@ -64,7 +42,7 @@ class TestRagSuccessfulSearch:
              patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
-            result = await rag_retrieval_node(_make_state())
+            result = await rag_retrieval_node(make_state())
 
         assert result["context_snippets"] == [
             "Runbook: restart the pod",
@@ -85,7 +63,7 @@ class TestRagEmptyResults:
              patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
-            result = await rag_retrieval_node(_make_state())
+            result = await rag_retrieval_node(make_state())
 
         assert result["context_snippets"] == []
         assert result["rag_query_used"] != ""
@@ -109,7 +87,7 @@ class TestRagVectorStoreLookup:
              patch("agent_service.nodes.rag_retrieval._vector_store_id", None):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
-            await rag_retrieval_node(_make_state())
+            await rag_retrieval_node(make_state())
 
         mock_client.vector_stores.list.assert_awaited_once()
         mock_client.vector_stores.search.assert_awaited_once()
@@ -125,7 +103,7 @@ class TestRagVectorStoreLookup:
              patch("agent_service.nodes.rag_retrieval._vector_store_id", None):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
-            result = await rag_retrieval_node(_make_state())
+            result = await rag_retrieval_node(make_state())
 
         assert result["context_snippets"] == []
         assert result["rag_query_used"] != ""
@@ -143,7 +121,7 @@ class TestRagErrorHandling:
              patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
-            result = await rag_retrieval_node(_make_state())
+            result = await rag_retrieval_node(make_state())
 
         assert result["context_snippets"] == []
         assert result["rag_query_used"] != ""
@@ -159,7 +137,7 @@ class TestRagErrorHandling:
              patch("agent_service.nodes.rag_retrieval._vector_store_id", None):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
-            result = await rag_retrieval_node(_make_state())
+            result = await rag_retrieval_node(make_state())
 
         assert result["context_snippets"] == []
         assert result["rag_query_used"] != ""

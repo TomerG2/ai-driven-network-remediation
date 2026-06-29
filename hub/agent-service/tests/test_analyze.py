@@ -2,29 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_service.models import IncidentState, LogEvent, RootCauseAnalysis
-
-
-def _make_log_event(**overrides):
-    defaults = dict(
-        timestamp="2024-01-01T00:00:00Z",
-        message="CrashLoopBackOff",
-        level="error",
-        namespace="prod",
-        pod_name="nginx-abc123",
-        container="nginx",
-        edge_site_id="edge-1",
-        kafka_offset=42,
-        raw="raw log line",
-    )
-    defaults.update(overrides)
-    return LogEvent(**defaults)
-
-
-def _make_state(**overrides):
-    defaults = dict(raw_event="some raw event", log_event=_make_log_event())
-    defaults.update(overrides)
-    return IncidentState(**defaults)
+from agent_service.models import RootCauseAnalysis
+from helpers import make_state
 
 
 _VALID_RCA_JSON = (
@@ -57,7 +36,7 @@ class TestSuccessfulLlmCall:
         with patch("agent_service.nodes.analyze._llm", mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
-            state = _make_state(context_snippets=["some runbook context"])
+            state = make_state(context_snippets=["some runbook context"])
             result = await analyze_node(state)
 
         rca = result["root_cause_analysis"]
@@ -78,7 +57,7 @@ class TestRagContextTruncation:
         with patch("agent_service.nodes.analyze._llm", mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
-            state = _make_state(context_snippets=[long_snippet])
+            state = make_state(context_snippets=[long_snippet])
             await analyze_node(state)
 
         call_args = mock_llm.ainvoke.call_args
@@ -99,7 +78,7 @@ class TestTokenAndLatencyTracking:
         with patch("agent_service.nodes.analyze._llm", mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
-            state = _make_state(context_snippets=["context"])
+            state = make_state(context_snippets=["context"])
             result = await analyze_node(state)
 
         assert result["analysis_tokens_used"] == 280
@@ -115,7 +94,7 @@ class TestLlmErrorFallback:
         with patch("agent_service.nodes.analyze._llm", mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
-            state = _make_state(context_snippets=["some context"])
+            state = make_state(context_snippets=["some context"])
             result = await analyze_node(state)
 
         rca = result["root_cause_analysis"]
@@ -133,7 +112,7 @@ class TestOverrideBypass:
         with patch("agent_service.nodes.analyze._llm", mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
-            state = _make_state(
+            state = make_state(
                 confidence_override=0.42,
                 failure_type_override="DNSFailure",
             )
