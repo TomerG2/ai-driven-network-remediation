@@ -26,8 +26,6 @@ spec:
               value: {{ index .Values "llama-stack" "host" | quote }}
             - name: LLAMASTACK_PORT
               value: {{ index .Values "llama-stack" "port" | quote }}
-            - name: GRANITE_MODEL_ENDPOINT
-              value: {{ .Values.agentService.granite.endpoint | quote }}
             - name: GRANITE_MODEL_NAME
               value: {{ .Values.agentService.granite.modelName | quote }}
           ports:

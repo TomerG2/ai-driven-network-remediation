@@ -9,11 +9,12 @@ from loguru import logger
 
 from agent_service.models import FailureType, RootCauseAnalysis
 
-_GRANITE_ENDPOINT = os.environ.get("GRANITE_MODEL_ENDPOINT", "http://localhost:8000/v1")
+_LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
+_LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
 _GRANITE_MODEL = os.environ.get("GRANITE_MODEL_NAME", "granite-4.0-8b")
 
 _llm = ChatOpenAI(
-    base_url=_GRANITE_ENDPOINT,
+    base_url=f"http://{_LLAMASTACK_HOST}:{_LLAMASTACK_PORT}/v1",
     model=_GRANITE_MODEL,
     api_key="unused",
 )
