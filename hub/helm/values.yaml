@@ -116,6 +116,9 @@ chatbotService:
 
 agentService:
   replicaCount: 1
+  granite:
+    endpoint: "http://llamastack:8321/v1"
+    modelName: "granite-4.0-8b"
   service:
     type: ClusterIP
     port: 8001
