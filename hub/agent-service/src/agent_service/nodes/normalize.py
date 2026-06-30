@@ -53,4 +53,7 @@ def normalize_node(state: dict) -> dict:
             raw=raw_event,
         )
 
-    return {"log_event": log_event}
+    result = {"log_event": log_event}
+    if isinstance(data, dict) and (incident_id := data.get("incident_id")):
+        result["incident_id"] = str(incident_id)
+    return result

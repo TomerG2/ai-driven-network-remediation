@@ -75,6 +75,29 @@ class TestCanonicalJsonParsing:
         assert log_event.level == "warn"
 
 
+class TestIncidentIdExtraction:
+    def test_incident_id_extracted_from_canonical_json(self):
+        event = {**CANONICAL_EVENT, "incident_id": "abc-123"}
+        raw = json.dumps(event)
+        state = IncidentState(raw_event=raw)
+        result = normalize_node(state)
+
+        assert result["incident_id"] == "abc-123"
+
+    def test_missing_incident_id_not_in_result(self):
+        raw = json.dumps(CANONICAL_EVENT)
+        state = IncidentState(raw_event=raw)
+        result = normalize_node(state)
+
+        assert "incident_id" not in result
+
+    def test_fallback_path_does_not_include_incident_id(self):
+        state = IncidentState(raw_event="plain text")
+        result = normalize_node(state)
+
+        assert "incident_id" not in result
+
+
 class TestKafkaOffsetPassthrough:
     def test_nonzero_kafka_offset_passes_through_to_log_event(self):
         raw = json.dumps(CANONICAL_EVENT)
