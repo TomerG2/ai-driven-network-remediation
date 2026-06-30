@@ -1,3 +1,4 @@
+import json
 import pytest
 from unittest.mock import patch
 
@@ -131,6 +132,52 @@ class TestGraphCompilation:
         notify_targets = [e.target for e in self.edges if e.source == "notify"]
         assert "audit" in notify_targets
         assert "__end__" not in notify_targets
+
+    def test_graph_has_no_request_approval_node(self):
+        graph = build_graph()
+        node_names = {n.name for n in graph.get_graph().nodes.values()}
+        assert "request_approval" not in node_names
+
+
+class TestNormalizeNode:
+    def test_normalize_extracts_canonical_json_fields(self):
+        canonical = json.dumps({
+            "@timestamp": "2024-01-15T10:30:00Z",
+            "message": "nginx CrashLoopBackOff in namespace prod",
+            "level": "error",
+            "kubernetes": {
+                "namespace_name": "prod",
+                "pod_name": "nginx-abc123",
+                "container_name": "nginx",
+            },
+            "labels": {"edge_site_id": "edge-site-01"},
+        })
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
+            graph = build_graph()
+            result = graph.invoke({"raw_event": canonical})
+        log_event = result["log_event"]
+        assert isinstance(log_event, LogEvent)
+        assert log_event.timestamp == "2024-01-15T10:30:00Z"
+        assert log_event.namespace == "prod"
+        assert log_event.pod_name == "nginx-abc123"
+        assert log_event.message == "nginx CrashLoopBackOff in namespace prod"
+
+
+class TestRagRetrievalNode:
+    def test_rag_retrieval_sets_rag_query_used(self):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
+            graph = build_graph()
+            result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert result["rag_query_used"] != ""
+
+    def test_rag_retrieval_sets_context_snippets(self):
+        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
+             patch("agent_service.graph.analyze_node", _analyze_stub):
+            graph = build_graph()
+            result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert len(result["context_snippets"]) > 0
 
 
 class TestLinearFlow:
