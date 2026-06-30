@@ -1,5 +1,6 @@
 INCIDENT_STATE_FIELDS = {
     "raw_event",
+    "kafka_offset",
     "log_event",
     "incident_id",
     "incident_start_ms",
