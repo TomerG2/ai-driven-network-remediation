@@ -4,6 +4,16 @@ from loguru import logger
 
 from agent_service.models import LogEvent
 
+_LEVEL_ALIASES = {
+    "warning": "warn",
+    "critical": "error",
+}
+
+
+def _normalize_level(raw_level: str) -> str:
+    lowered = raw_level.lower()
+    return _LEVEL_ALIASES.get(lowered, lowered)
+
 
 def normalize_node(state: dict) -> dict:
     logger.info("Normalize node invoked")
@@ -21,7 +31,7 @@ def normalize_node(state: dict) -> dict:
         log_event = LogEvent(
             timestamp=data.get("@timestamp", "unknown"),
             message=data.get("message", "unknown"),
-            level=data.get("level", "unknown"),
+            level=_normalize_level(data.get("level", "unknown")),
             namespace=k8s.get("namespace_name", "unknown"),
             pod_name=k8s.get("pod_name", "unknown"),
             container=k8s.get("container_name", "unknown"),

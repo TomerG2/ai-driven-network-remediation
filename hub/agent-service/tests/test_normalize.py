@@ -142,3 +142,66 @@ class TestNonJsonFallback:
         assert log_event.edge_site_id == "unknown"
         assert log_event.level == "unknown"
         assert log_event.timestamp == "unknown"
+
+
+def _make_event_with_level(level: str) -> str:
+    event = dict(CANONICAL_EVENT)
+    event["level"] = level
+    return json.dumps(event)
+
+
+class TestLevelNormalization:
+    def test_warning_maps_to_warn(self):
+        state = IncidentState(raw_event=_make_event_with_level("WARNING"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "warn"
+
+    def test_lowercase_warning_maps_to_warn(self):
+        state = IncidentState(raw_event=_make_event_with_level("warning"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "warn"
+
+    def test_mixed_case_warning_maps_to_warn(self):
+        state = IncidentState(raw_event=_make_event_with_level("Warning"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "warn"
+
+    def test_critical_maps_to_error(self):
+        state = IncidentState(raw_event=_make_event_with_level("CRITICAL"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "error"
+
+    def test_lowercase_critical_maps_to_error(self):
+        state = IncidentState(raw_event=_make_event_with_level("critical"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "error"
+
+    def test_uppercase_error_is_lowercased(self):
+        state = IncidentState(raw_event=_make_event_with_level("Error"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "error"
+
+    def test_uppercase_info_is_lowercased(self):
+        state = IncidentState(raw_event=_make_event_with_level("INFO"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "info"
+
+    def test_already_normalized_info_passes_through(self):
+        state = IncidentState(raw_event=_make_event_with_level("info"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "info"
+
+    def test_already_normalized_error_passes_through(self):
+        state = IncidentState(raw_event=_make_event_with_level("error"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "error"
+
+    def test_unexpected_level_is_lowercased(self):
+        state = IncidentState(raw_event=_make_event_with_level("TRACE"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "trace"
+
+    def test_unknown_level_passes_through(self):
+        state = IncidentState(raw_event=_make_event_with_level("unknown"))
+        result = normalize_node(state)
+        assert result["log_event"].level == "unknown"
