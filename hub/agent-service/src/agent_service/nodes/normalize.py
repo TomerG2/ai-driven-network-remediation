@@ -8,7 +8,7 @@ from agent_service.models import LogEvent
 def normalize_node(state: dict) -> dict:
     logger.info("Normalize node invoked")
     raw_event = state.raw_event
-    kafka_offset = getattr(state, "kafka_offset", 0) or 0
+    kafka_offset = state.kafka_offset
 
     try:
         data = json.loads(raw_event)

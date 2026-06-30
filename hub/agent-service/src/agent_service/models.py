@@ -65,6 +65,7 @@ class GraphConfig(BaseModel):
 
 class IncidentState(BaseModel):
     raw_event: str
+    kafka_offset: int = 0
     log_event: Optional[LogEvent] = None
     incident_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     incident_start_ms: float = Field(default_factory=lambda: time.time() * 1000)

@@ -74,6 +74,16 @@ class TestCanonicalJsonParsing:
         assert log_event.level == "warn"
 
 
+class TestKafkaOffsetPassthrough:
+    def test_nonzero_kafka_offset_passes_through_to_log_event(self):
+        raw = json.dumps(CANONICAL_EVENT)
+        state = IncidentState(raw_event=raw, kafka_offset=99)
+        result = normalize_node(state)
+        log_event = result["log_event"]
+
+        assert log_event.kafka_offset == 99
+
+
 class TestNonJsonFallback:
     def test_plain_text_uses_fallback(self):
         raw = "nginx CrashLoopBackOff in namespace prod"
