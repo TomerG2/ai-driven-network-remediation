@@ -30,10 +30,11 @@ def normalize_node(state: dict) -> dict:
             raw=raw_event,
         )
     else:
+        logger.warning("Could not parse raw_event as canonical JSON, using fallback defaults")
         log_event = LogEvent(
-            timestamp="1970-01-01T00:00:00Z",
+            timestamp="unknown",
             message=raw_event,
-            level="error",
+            level="unknown",
             namespace="unknown",
             pod_name="unknown",
             container="unknown",

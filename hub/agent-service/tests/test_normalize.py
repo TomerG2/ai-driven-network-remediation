@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from agent_service.models import IncidentState
 from agent_service.nodes.normalize import normalize_node
@@ -95,4 +96,49 @@ class TestNonJsonFallback:
         assert log_event.raw == raw
         assert log_event.namespace == "unknown"
         assert log_event.pod_name == "unknown"
-        assert log_event.timestamp == "1970-01-01T00:00:00Z"
+        assert log_event.container == "unknown"
+        assert log_event.edge_site_id == "unknown"
+        assert log_event.level == "unknown"
+        assert log_event.timestamp == "unknown"
+
+    def test_empty_string_uses_fallback(self):
+        state = IncidentState(raw_event="")
+        result = normalize_node(state)
+        log_event = result["log_event"]
+
+        assert log_event.message == ""
+        assert log_event.raw == ""
+        assert log_event.namespace == "unknown"
+        assert log_event.pod_name == "unknown"
+        assert log_event.container == "unknown"
+        assert log_event.edge_site_id == "unknown"
+        assert log_event.level == "unknown"
+        assert log_event.timestamp == "unknown"
+
+    def test_fallback_emits_loguru_warning(self):
+        state = IncidentState(raw_event="not json")
+        with patch("agent_service.nodes.normalize.logger") as mock_logger:
+            normalize_node(state)
+            mock_logger.warning.assert_called_once()
+
+    def test_canonical_json_does_not_emit_warning(self):
+        raw = json.dumps(CANONICAL_EVENT)
+        state = IncidentState(raw_event=raw)
+        with patch("agent_service.nodes.normalize.logger") as mock_logger:
+            normalize_node(state)
+            mock_logger.warning.assert_not_called()
+
+    def test_broken_json_uses_fallback(self):
+        raw = '{"message": "hello"'
+        state = IncidentState(raw_event=raw)
+        result = normalize_node(state)
+        log_event = result["log_event"]
+
+        assert log_event.message == raw
+        assert log_event.raw == raw
+        assert log_event.namespace == "unknown"
+        assert log_event.pod_name == "unknown"
+        assert log_event.container == "unknown"
+        assert log_event.edge_site_id == "unknown"
+        assert log_event.level == "unknown"
+        assert log_event.timestamp == "unknown"
