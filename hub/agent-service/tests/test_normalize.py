@@ -107,6 +107,12 @@ class TestKafkaOffsetPassthrough:
 
         assert log_event.kafka_offset == 99
 
+    def test_fallback_path_passes_kafka_offset(self):
+        state = IncidentState(raw_event="not json", kafka_offset=42)
+        result = normalize_node(state)
+
+        assert result["log_event"].kafka_offset == 42
+
 
 class TestNonJsonFallback:
     def test_plain_text_uses_fallback(self):
