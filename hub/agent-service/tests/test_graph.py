@@ -140,7 +140,7 @@ class TestGraphCompilation:
 
 
 class TestNormalizeNode:
-    def test_normalize_extracts_canonical_json_fields(self):
+    async def test_normalize_extracts_canonical_json_fields(self, _patch_graph_nodes):
         canonical = json.dumps({
             "@timestamp": "2024-01-15T10:30:00Z",
             "message": "nginx CrashLoopBackOff in namespace prod",
@@ -152,10 +152,8 @@ class TestNormalizeNode:
             },
             "labels": {"edge_site_id": "edge-site-01"},
         })
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
-             patch("agent_service.graph.analyze_node", _analyze_stub):
-            graph = build_graph()
-            result = graph.invoke({"raw_event": canonical})
+        graph = build_graph()
+        result = await graph.ainvoke({"raw_event": canonical})
         log_event = result["log_event"]
         assert isinstance(log_event, LogEvent)
         assert log_event.timestamp == "2024-01-15T10:30:00Z"
@@ -165,18 +163,14 @@ class TestNormalizeNode:
 
 
 class TestRagRetrievalNode:
-    def test_rag_retrieval_sets_rag_query_used(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
-             patch("agent_service.graph.analyze_node", _analyze_stub):
-            graph = build_graph()
-            result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+    async def test_rag_retrieval_sets_rag_query_used(self, _patch_graph_nodes):
+        graph = build_graph()
+        result = await graph.ainvoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
         assert result["rag_query_used"] != ""
 
-    def test_rag_retrieval_sets_context_snippets(self):
-        with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
-             patch("agent_service.graph.analyze_node", _analyze_stub):
-            graph = build_graph()
-            result = graph.invoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+    async def test_rag_retrieval_sets_context_snippets(self, _patch_graph_nodes):
+        graph = build_graph()
+        result = await graph.ainvoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
         assert len(result["context_snippets"]) > 0
 
 
