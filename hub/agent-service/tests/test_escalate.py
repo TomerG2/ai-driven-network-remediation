@@ -19,6 +19,16 @@ def _stub_rca(**overrides):
     return RootCauseAnalysis(**defaults)
 
 
+def _make_capture_invoke(number="INC0012345"):
+    captured = {}
+
+    async def _capture_invoke(tool_name, kwargs):
+        captured.update({"tool_name": tool_name, "kwargs": kwargs})
+        return {"success": True, "number": number}
+
+    return captured, _capture_invoke
+
+
 async def _fake_invoke(tool_name, kwargs):
     if tool_name == "create_incident":
         return {"success": True, "number": "INC0012345"}
@@ -42,13 +52,9 @@ class TestEscalateHappyPath:
 
     async def test_calls_create_incident_with_correct_short_description(self):
         state = make_state(root_cause_analysis=_stub_rca())
-        captured = {}
+        captured, capture_invoke = _make_capture_invoke()
 
-        async def _capture_invoke(tool_name, kwargs):
-            captured.update({"tool_name": tool_name, "kwargs": kwargs})
-            return {"success": True, "number": "INC0012345"}
-
-        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
             await escalate_node(state)
 
         assert captured["tool_name"] == "create_incident"
@@ -57,13 +63,9 @@ class TestEscalateHappyPath:
 
     async def test_description_contains_rca_context(self):
         state = make_state(root_cause_analysis=_stub_rca())
-        captured = {}
+        captured, capture_invoke = _make_capture_invoke()
 
-        async def _capture_invoke(tool_name, kwargs):
-            captured.update({"tool_name": tool_name, "kwargs": kwargs})
-            return {"success": True, "number": "INC0012345"}
-
-        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
@@ -77,13 +79,9 @@ class TestEscalateHappyPath:
 class TestPriorityMapping:
     async def _get_priority(self, severity):
         state = make_state(root_cause_analysis=_stub_rca(estimated_severity=severity))
-        captured = {}
+        captured, capture_invoke = _make_capture_invoke(number="INC0099")
 
-        async def _capture_invoke(tool_name, kwargs):
-            captured.update({"kwargs": kwargs})
-            return {"success": True, "number": "INC0099"}
-
-        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
             await escalate_node(state)
 
         return captured["kwargs"]["priority"]
@@ -152,13 +150,9 @@ class TestEscalateFailedAttempts:
             root_cause_analysis=_stub_rca(),
             failed_attempts=attempts,
         )
-        captured = {}
+        captured, capture_invoke = _make_capture_invoke()
 
-        async def _capture_invoke(tool_name, kwargs):
-            captured.update({"kwargs": kwargs})
-            return {"success": True, "number": "INC0012345"}
-
-        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
@@ -168,13 +162,9 @@ class TestEscalateFailedAttempts:
 
     async def test_empty_failed_attempts_omits_section(self):
         state = make_state(root_cause_analysis=_stub_rca(), failed_attempts=[])
-        captured = {}
+        captured, capture_invoke = _make_capture_invoke()
 
-        async def _capture_invoke(tool_name, kwargs):
-            captured.update({"kwargs": kwargs})
-            return {"success": True, "number": "INC0012345"}
-
-        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
@@ -188,13 +178,9 @@ class TestEscalateFailedAttempts:
             root_cause_analysis=_stub_rca(),
             failed_attempts=attempts,
         )
-        captured = {}
+        captured, capture_invoke = _make_capture_invoke()
 
-        async def _capture_invoke(tool_name, kwargs):
-            captured.update({"kwargs": kwargs})
-            return {"success": True, "number": "INC0012345"}
-
-        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
