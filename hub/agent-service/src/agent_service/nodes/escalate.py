@@ -5,6 +5,40 @@ from agent_service.utils import invoke_tool as _invoke_tool
 _PRIORITY_MAP = {"critical": 1, "high": 2, "medium": 3, "low": 4}
 
 
+def _build_description(log_event, rca, failed_attempts) -> str:
+    lines = [
+        f"Failure Type: {rca.failure_type}",
+        f"Confidence: {rca.confidence}",
+        f"Severity: {rca.estimated_severity}",
+        f"Edge Site: {log_event.edge_site_id}",
+        f"Namespace: {log_event.namespace}",
+        f"Pod: {log_event.pod_name}",
+        f"Container: {log_event.container}",
+        "",
+        "--- Root Cause Analysis ---",
+        f"Summary: {rca.summary}",
+        "Evidence:",
+        *(f"  - {item}" for item in rca.evidence),
+        "Recommended Actions:",
+        *(f"  - {action}" for action in rca.recommended_actions),
+        "",
+        "--- Original Log Message ---",
+        log_event.message,
+    ]
+
+    if failed_attempts:
+        lines.append("")
+        lines.append("--- Failed Remediation Attempts ---")
+        for i, attempt in enumerate(failed_attempts, 1):
+            parts = [f"Template: {attempt['template']}"]
+            if "job_id" in attempt:
+                parts.append(f"Job: {attempt['job_id']}")
+            parts.append(f"Error: {attempt['error']}")
+            lines.append(f"{i}. {' | '.join(parts)}")
+
+    return "\n".join(lines) + "\n"
+
+
 async def escalate_node(state) -> dict:
     log_event = state.log_event
     rca = state.root_cause_analysis
@@ -14,34 +48,7 @@ async def escalate_node(state) -> dict:
         f" in {log_event.namespace} ({log_event.edge_site_id})"
     )
 
-    description = (
-        f"Failure Type: {rca.failure_type}\n"
-        f"Confidence: {rca.confidence}\n"
-        f"Severity: {rca.estimated_severity}\n"
-        f"Edge Site: {log_event.edge_site_id}\n"
-        f"Namespace: {log_event.namespace}\n"
-        f"Pod: {log_event.pod_name}\n"
-        f"Container: {log_event.container}\n"
-        f"\n--- Root Cause Analysis ---\n"
-        f"Summary: {rca.summary}\n"
-        f"Evidence:\n"
-    )
-    for item in rca.evidence:
-        description += f"  - {item}\n"
-    description += "Recommended Actions:\n"
-    for action in rca.recommended_actions:
-        description += f"  - {action}\n"
-    description += f"\n--- Original Log Message ---\n{log_event.message}\n"
-
-    if state.failed_attempts:
-        description += "\n--- Failed Remediation Attempts ---\n"
-        for i, attempt in enumerate(state.failed_attempts, 1):
-            parts = [f"Template: {attempt['template']}"]
-            if "job_id" in attempt:
-                parts.append(f"Job: {attempt['job_id']}")
-            parts.append(f"Error: {attempt['error']}")
-            description += f"{i}. {' | '.join(parts)}\n"
-
+    description = _build_description(log_event, rca, state.failed_attempts)
     priority = _PRIORITY_MAP.get(rca.estimated_severity, 4)
 
     logger.info(f"Creating ServiceNow incident: {short_description}")
