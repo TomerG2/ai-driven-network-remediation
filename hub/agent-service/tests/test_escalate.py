@@ -143,8 +143,8 @@ class TestEscalateErrorHandling:
 class TestEscalateFailedAttempts:
     async def test_failed_attempts_appear_in_description(self):
         attempts = [
-            {"template": "restart_deployment", "error": "timeout after 120s", "job_id": 42},
-            {"template": "scale_up", "error": "quota exceeded", "job_id": 99},
+            {"action": "remediate", "template": "restart_deployment", "error": "timeout after 120s", "job_id": 42},
+            {"action": "remediate", "template": "scale_up", "error": "quota exceeded", "job_id": 99},
         ]
         state = make_state(
             root_cause_analysis=_stub_rca(),
@@ -172,7 +172,7 @@ class TestEscalateFailedAttempts:
 
     async def test_missing_job_id_omits_job_field(self):
         attempts = [
-            {"template": "restart_deployment", "error": "timeout after 120s"},
+            {"action": "remediate", "template": "restart_deployment", "error": "timeout after 120s"},
         ]
         state = make_state(
             root_cause_analysis=_stub_rca(),
