@@ -36,11 +36,21 @@ async def escalate_node(state) -> dict:
     priority = _PRIORITY_MAP.get(rca.estimated_severity, 4)
 
     logger.info(f"Creating ServiceNow incident: {short_description}")
-    response = await _invoke_tool("create_incident", {
-        "short_description": short_description,
-        "description": description,
-        "priority": priority,
-    })
+    try:
+        response = await _invoke_tool("create_incident", {
+            "short_description": short_description,
+            "description": description,
+            "priority": priority,
+        })
+    except Exception as exc:
+        reason = str(exc)
+        logger.warning(f"ServiceNow escalation failed: {reason}")
+        return {"servicenow_ticket": "", "error_message": reason}
+
+    if not response.get("success", True):
+        reason = response.get("error", "unknown error")
+        logger.warning(f"ServiceNow escalation failed: {reason}")
+        return {"servicenow_ticket": "", "error_message": reason}
 
     ticket = response.get("number", "")
     logger.info(f"ServiceNow ticket created: {ticket}")

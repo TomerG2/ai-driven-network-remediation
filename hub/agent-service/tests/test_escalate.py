@@ -99,3 +99,44 @@ class TestPriorityMapping:
 
     async def test_low_maps_to_4(self):
         assert await self._get_priority("low") == 4
+
+
+class TestEscalateErrorHandling:
+    async def test_servicenow_failure_returns_empty_ticket(self):
+        state = make_state(root_cause_analysis=_stub_rca())
+
+        async def _fail_invoke(tool_name, kwargs):
+            return {"success": False, "error": "connection refused"}
+
+        with patch("agent_service.nodes.escalate._invoke_tool", _fail_invoke):
+            result = await escalate_node(state)
+
+        assert result["servicenow_ticket"] == ""
+        assert result["error_message"] == "connection refused"
+
+    async def test_servicenow_exception_returns_empty_ticket(self):
+        state = make_state(root_cause_analysis=_stub_rca())
+
+        async def _explode_invoke(tool_name, kwargs):
+            raise ConnectionError("MCP server unreachable")
+
+        with patch("agent_service.nodes.escalate._invoke_tool", _explode_invoke):
+            result = await escalate_node(state)
+
+        assert result["servicenow_ticket"] == ""
+        assert "MCP server unreachable" in result["error_message"]
+
+    async def test_servicenow_failure_logs_warning(self):
+        state = make_state(root_cause_analysis=_stub_rca())
+
+        async def _fail_invoke(tool_name, kwargs):
+            return {"success": False, "error": "connection refused"}
+
+        with (
+            patch("agent_service.nodes.escalate._invoke_tool", _fail_invoke),
+            patch("agent_service.nodes.escalate.logger") as mock_logger,
+        ):
+            await escalate_node(state)
+
+        mock_logger.warning.assert_called_once()
+        assert "connection refused" in mock_logger.warning.call_args[0][0]
