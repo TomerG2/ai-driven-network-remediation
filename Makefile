@@ -3,7 +3,7 @@ REGISTRY        ?= quay.io/rh-ai-quickstart
 VERSION         ?= 0.1.0
 ARCH            ?= linux/amd64
 NAMESPACE       ?= hub
-EDGE_NAMESPACE  ?= $(NAMESPACE) # TODO: Change to dark-noc-edge
+EDGE_NAMESPACE  ?= $(NAMESPACE)
 RELEASE         ?= hub
 PUSH_EXTRA_ARGS ?=
 ROUTES_ENABLED  ?= true
@@ -32,6 +32,7 @@ ENABLE_LOKISTACK       ?= false
 ENABLE_LOKISTACK_TEST  ?= false
 ENABLE_AAP_MOCK        ?= true
 ENABLE_SERVICENOW_MOCK ?= true
+ENABLE_LIGHTSPEED      ?= false
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -123,6 +124,19 @@ helm_lokistack_args = \
 	--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
 	$(if $(filter true,$(ENABLE_LOKISTACK)),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
 
+ifeq ($(ENABLE_LIGHTSPEED),true)
+ifndef LIGHTSPEED_URL
+LIGHTSPEED_URL = $(shell oc get svc -A --no-headers 2>/dev/null | \
+	awk '/lightspeed.*app/{ns=$$1; name=$$2; split($$6,p,"/"); printf "https://%s.%s.svc:%s", name, ns, p[1]; exit}')
+ifeq ($(LIGHTSPEED_URL),)
+$(error ENABLE_LIGHTSPEED=true but no Lightspeed service found and LIGHTSPEED_URL not set. Set LIGHTSPEED_URL explicitly or install the Lightspeed operator.)
+endif
+endif
+endif
+
+helm_lightspeed_args = \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.url='$(LIGHTSPEED_URL)',)
+
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
@@ -146,6 +160,8 @@ helm_all_args = \
 	$(helm_mcp_image_args) \
 	$(helm_mock_args) \
 	$(helm_adnr_llm_args) \
+	$(helm_autorag_args) \
+	$(helm_lightspeed_args) \
 	$(HELM_EXTRA_ARGS)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -154,6 +170,9 @@ helm_all_args = \
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
+ifeq ($(ENABLE_LIGHTSPEED),true)
+	$(MAKE) _check-lightspeed-operator
+endif
 ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
 	helm upgrade --install $(RELEASE) hub/helm \
@@ -206,6 +225,21 @@ check-adnr-llm-config:
 		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
 		exit 1; \
 	fi
+
+.PHONY: _check-lightspeed-operator
+_check-lightspeed-operator:
+	@oc get csv -A 2>/dev/null | grep -q "lightspeed-operator" || \
+		{ echo ""; \
+		  echo "ERROR: Lightspeed Operator is not installed on this cluster."; \
+		  echo ""; \
+		  echo "To install the Lightspeed Operator:"; \
+		  echo "  1. In the OpenShift web console, navigate to:"; \
+		  echo "     Operators → OperatorHub"; \
+		  echo "  2. Search for 'Ansible Lightspeed'"; \
+		  echo "  3. Click 'Install' and follow the installation wizard"; \
+		  echo "  4. Wait for the operator to become ready"; \
+		  echo ""; \
+		  exit 1; }
 
 .PHONY: edge-rbac-teardown
 edge-rbac-teardown:
