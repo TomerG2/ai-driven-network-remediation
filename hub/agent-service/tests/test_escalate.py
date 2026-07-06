@@ -140,3 +140,63 @@ class TestEscalateErrorHandling:
 
         mock_logger.warning.assert_called_once()
         assert "connection refused" in mock_logger.warning.call_args[0][0]
+
+
+class TestEscalateFailedAttempts:
+    async def test_failed_attempts_appear_in_description(self):
+        attempts = [
+            {"template": "restart_deployment", "error": "timeout after 120s", "job_id": 42},
+            {"template": "scale_up", "error": "quota exceeded", "job_id": 99},
+        ]
+        state = make_state(
+            root_cause_analysis=_stub_rca(),
+            failed_attempts=attempts,
+        )
+        captured = {}
+
+        async def _capture_invoke(tool_name, kwargs):
+            captured.update({"kwargs": kwargs})
+            return {"success": True, "number": "INC0012345"}
+
+        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+            await escalate_node(state)
+
+        desc = captured["kwargs"]["description"]
+        assert "--- Failed Remediation Attempts ---" in desc
+        assert "1. Template: restart_deployment | Job: 42 | Error: timeout after 120s" in desc
+        assert "2. Template: scale_up | Job: 99 | Error: quota exceeded" in desc
+
+    async def test_empty_failed_attempts_omits_section(self):
+        state = make_state(root_cause_analysis=_stub_rca(), failed_attempts=[])
+        captured = {}
+
+        async def _capture_invoke(tool_name, kwargs):
+            captured.update({"kwargs": kwargs})
+            return {"success": True, "number": "INC0012345"}
+
+        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+            await escalate_node(state)
+
+        desc = captured["kwargs"]["description"]
+        assert "Failed Remediation Attempts" not in desc
+
+    async def test_missing_job_id_omits_job_field(self):
+        attempts = [
+            {"template": "restart_deployment", "error": "timeout after 120s"},
+        ]
+        state = make_state(
+            root_cause_analysis=_stub_rca(),
+            failed_attempts=attempts,
+        )
+        captured = {}
+
+        async def _capture_invoke(tool_name, kwargs):
+            captured.update({"kwargs": kwargs})
+            return {"success": True, "number": "INC0012345"}
+
+        with patch("agent_service.nodes.escalate._invoke_tool", _capture_invoke):
+            await escalate_node(state)
+
+        desc = captured["kwargs"]["description"]
+        assert "1. Template: restart_deployment | Error: timeout after 120s" in desc
+        assert "Job:" not in desc

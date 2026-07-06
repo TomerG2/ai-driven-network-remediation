@@ -33,6 +33,15 @@ async def escalate_node(state) -> dict:
         description += f"  - {action}\n"
     description += f"\n--- Original Log Message ---\n{log_event.message}\n"
 
+    if state.failed_attempts:
+        description += "\n--- Failed Remediation Attempts ---\n"
+        for i, attempt in enumerate(state.failed_attempts, 1):
+            parts = [f"Template: {attempt['template']}"]
+            if "job_id" in attempt:
+                parts.append(f"Job: {attempt['job_id']}")
+            parts.append(f"Error: {attempt['error']}")
+            description += f"{i}. {' | '.join(parts)}\n"
+
     priority = _PRIORITY_MAP.get(rca.estimated_severity, 4)
 
     logger.info(f"Creating ServiceNow incident: {short_description}")
