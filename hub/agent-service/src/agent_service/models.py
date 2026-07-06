@@ -1,6 +1,6 @@
 import time
 import uuid
-from typing import Literal, Optional
+from typing import Literal, NotRequired, Optional, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -56,6 +56,13 @@ class RemediationResult(BaseModel):
     generated_playbook_preview: Optional[str] = None
 
 
+class FailedAttempt(TypedDict):
+    action: str
+    template: str
+    error: str
+    job_id: NotRequired[int]
+
+
 class GraphConfig(BaseModel):
     remediate_threshold: float = 0.8
     escalate_threshold: float = 0.7
@@ -77,7 +84,7 @@ class IncidentState(BaseModel):
     analysis_tokens_used: int = 0
     analysis_latency_ms: float = 0.0
     decision: str = ""
-    failed_attempts: list[dict] = []
+    failed_attempts: list[FailedAttempt] = []
     should_retry: bool = False
     remediation_result: Optional[RemediationResult] = None
     pod_status: dict = {}
