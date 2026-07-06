@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
 from agent_service.models import IncidentState
@@ -6,6 +8,12 @@ from agent_service.server import app
 INCIDENT_STATE_FIELDS = set(IncidentState.model_fields.keys())
 
 client = TestClient(app)
+
+
+async def _mock_escalate_invoke(tool_name, kwargs):
+    if tool_name == "create_incident":
+        return {"success": True, "number": "INC0000001"}
+    return {}
 
 
 class TestHealthEndpoint:
@@ -24,7 +32,8 @@ class TestReadyEndpoint:
 
 class TestRemediateEndpoint:
     def test_post_remediate_returns_full_state(self):
-        response = client.post("/remediate", json={"raw_event": "test event"})
+        with patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke):
+            response = client.post("/remediate", json={"raw_event": "test event"})
         assert response.status_code == 200
         body = response.json()
         assert body["raw_event"] == "test event"

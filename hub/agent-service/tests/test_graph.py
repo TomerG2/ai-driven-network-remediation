@@ -99,12 +99,19 @@ _STUB_RCA = RootCauseAnalysis(
 )
 
 
+async def _mock_escalate_invoke(tool_name, kwargs):
+    if tool_name == "create_incident":
+        return {"success": True, "number": "INC0000001"}
+    return {}
+
+
 @pytest.fixture
 def _patch_graph_nodes():
     with (
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
+        patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke),
     ):
         yield
 
