@@ -93,6 +93,8 @@ class TestConsumerLifecycle:
         assert kwargs["bootstrap_servers"] == "kafka:9092"
         assert kwargs["group_id"] == "dark-noc-agent"
         assert kwargs["auto_offset_reset"] == "latest"
+        assert kwargs["max_poll_records"] == 1
+        assert kwargs["max_poll_interval_ms"] == 600_000
         mock_consumer.close.assert_called()
 
     @patch("agent_service.kafka.consumer.KafkaConsumer")
@@ -166,6 +168,26 @@ class TestConsumerLifecycle:
 
         assert len(handled) == 1
         assert handled[0].offset == 2
+
+    @patch("agent_service.kafka.consumer.logger.warning")
+    def test_stop_warns_when_thread_still_alive(self, mock_warning):
+        consumer = AlertConsumer(
+            lambda _alert: None,
+            bootstrap_servers="kafka:9092",
+            topics=["system-alerts"],
+            group_id="test-group",
+            poll_timeout_ms=100,
+        )
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        consumer._thread = mock_thread
+
+        consumer.stop()
+
+        mock_thread.join.assert_called_once()
+        mock_warning.assert_called_once_with(
+            "Kafka alert consumer thread still running after join timeout",
+        )
 
     @patch("agent_service.kafka.consumer.KafkaConsumer")
     def test_stop_closes_consumer_once(self, mock_kafka_consumer_cls):
