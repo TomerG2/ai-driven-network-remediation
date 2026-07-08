@@ -348,7 +348,7 @@ class TestRemediateNode:
 
         assert result["remediation_result"].success is True
         assert result["remediation_result"].job_id == "42"
-        assert result["remediation_result"].action_taken == "restart-pod"
+        assert result["remediation_result"].action_taken == "restart-nginx"
         assert result["should_retry"] is False
 
     async def test_success_after_failure_clears_should_retry(self):
