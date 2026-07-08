@@ -75,8 +75,15 @@ def _mock_invoke_tool(launch=None, status=None, output=None, upsert=None):
     return _invoke
 
 
-def _mock_mcp_call_aap(launch=None, status=None, output=None):
+def _mock_mcp_call_aap(launch=None, status=None, output=None, upsert=None):
     async def _invoke(service, tool_name, args):
+        if tool_name == "upsert_job_template":
+            return upsert or {
+                "success": True,
+                "template_id": 99,
+                "created": True,
+                "template_name": args.get("template_name", ""),
+            }
         if tool_name == "launch_job":
             return launch or {
                 "success": True,
@@ -169,7 +176,7 @@ def _patch_graph_nodes():
         patch("agent_service.nodes.escalate._mcp_call", _mock_escalate_invoke),
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
         patch("agent_service.nodes.lightspeed._call_ols", _ols_mock),
-        patch("agent_service.nodes.lightspeed._invoke_tool", _mock_invoke_tool()),
+        patch("agent_service.nodes.lightspeed._mcp_call", _mock_mcp_call_aap()),
     ):
         yield
 

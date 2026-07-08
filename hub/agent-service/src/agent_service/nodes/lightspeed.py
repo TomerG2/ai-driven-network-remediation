@@ -16,7 +16,7 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.models import RemediationResult
-from agent_service.utils import invoke_tool as _invoke_tool
+from agent_service.utils import mcp_call as _mcp_call
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
@@ -133,7 +133,8 @@ async def _call_ols(prompt: str, attachments: list[dict]) -> dict:
 
 
 async def _upsert_template(name: str) -> dict:
-    return await _invoke_tool(
+    return await _mcp_call(
+        "aap",
         "upsert_job_template",
         {
             "template_name": name,
@@ -257,7 +258,8 @@ async def _execute_in_aap(
         )
 
     extra_vars = _build_extra_vars(log_event, name, yaml_content)
-    launch = await _invoke_tool(
+    launch = await _mcp_call(
+        "aap",
         "launch_job",
         {"job_template_name": name, "extra_vars": extra_vars},
     )

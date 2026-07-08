@@ -48,7 +48,7 @@ def _state(rca=None, log_event=None, use_defaults=True):
     )
 
 
-async def _default_invoke(tool_name, kwargs):
+async def _default_invoke(service, tool_name, args):
     if tool_name == "upsert_job_template":
         return _UPSERT_OK
     if tool_name == "launch_job":
@@ -72,7 +72,7 @@ async def _run_node(
     with (
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
         patch("agent_service.nodes.lightspeed._call_ols", ols_mock),
-        patch("agent_service.nodes.lightspeed._invoke_tool", invoke_mock),
+        patch("agent_service.nodes.lightspeed._mcp_call", invoke_mock),
     ):
         result = await lightspeed_node(_state(**state_kw))
     return result, ols_mock, invoke_mock
@@ -261,8 +261,9 @@ class TestAAPExecution:
         _, _, invoke_mock = await _run_node(ols_return=_OLS_RESPONSE)
 
         upsert_call = invoke_mock.call_args_list[0]
-        assert upsert_call[0][0] == "upsert_job_template"
-        args = upsert_call[0][1]
+        assert upsert_call[0][0] == "aap"
+        assert upsert_call[0][1] == "upsert_job_template"
+        args = upsert_call[0][2]
         assert args["playbook"] == "playbooks/lightspeed-generate-and-run.yaml"
         assert args["base_template_name"] == "lightspeed-runner"
         assert args["template_name"] == "remediate-oomkilled-nginx-abc123"
@@ -271,8 +272,9 @@ class TestAAPExecution:
         _, _, invoke_mock = await _run_node(ols_return=_OLS_RESPONSE)
 
         launch_call = invoke_mock.call_args_list[1]
-        assert launch_call[0][0] == "launch_job"
-        extra_vars = launch_call[0][1]["extra_vars"]
+        assert launch_call[0][0] == "aap"
+        assert launch_call[0][1] == "launch_job"
+        extra_vars = launch_call[0][2]["extra_vars"]
         assert extra_vars["generated_from_model"] is True
         assert extra_vars["generated_playbook_name"] == ("remediate-oomkilled-nginx-abc123")
         assert "hosts: all" in extra_vars["generated_playbook_yaml"]
@@ -280,7 +282,7 @@ class TestAAPExecution:
         assert extra_vars["pod_name"] == "nginx-abc123"
 
     async def test_upsert_failure(self):
-        async def upsert_fails(tool_name, kwargs):
+        async def upsert_fails(service, tool_name, args):
             if tool_name == "upsert_job_template":
                 return {"success": False, "error": "template conflict"}
             return _LAUNCH_OK
@@ -297,7 +299,7 @@ class TestAAPExecution:
         assert "launch_job" not in tool_names
 
     async def test_launch_failure(self):
-        async def launch_fails(tool_name, kwargs):
+        async def launch_fails(service, tool_name, args):
             if tool_name == "upsert_job_template":
                 return _UPSERT_OK
             return {"success": False, "error": "quota exceeded"}
@@ -322,7 +324,7 @@ class TestAAPExecution:
         assert rr.success is True
 
         launch_call = invoke_mock.call_args_list[1]
-        extra_vars = launch_call[0][1]["extra_vars"]
+        extra_vars = launch_call[0][2]["extra_vars"]
         assert extra_vars["generated_from_model"] is True
         assert "hosts: all" in extra_vars["generated_playbook_yaml"]
         assert "namespace" not in extra_vars
