@@ -256,6 +256,7 @@ edgeRbac:
 ingestionPipeline:
   replicaCount: 1
   autoIngestOnStartup: "true"
+  waitForDeps: true
   vectorStoreName: noc_runbooks
   llamastackHost: llamastack
   embeddingModel: sentence-transformers/nomic-ai/nomic-embed-text-v1.5
