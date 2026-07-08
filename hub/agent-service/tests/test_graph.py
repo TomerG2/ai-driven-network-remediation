@@ -123,7 +123,7 @@ _OLS_STUB_RESPONSE = {
 _ols_mock = AsyncMock(return_value=_OLS_STUB_RESPONSE)
 
 
-async def _mock_escalate_invoke(tool_name, kwargs):
+async def _mock_escalate_invoke(service, tool_name, args):
     if tool_name == "create_incident":
         return {"success": True, "number": "INC0000001"}
     return {}
@@ -136,7 +136,7 @@ def _patch_graph_nodes():
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
-        patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke),
+        patch("agent_service.nodes.escalate._mcp_call", _mock_escalate_invoke),
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
         patch("agent_service.nodes.lightspeed._call_ols", _ols_mock),
         patch("agent_service.nodes.lightspeed._invoke_tool", _mock_invoke_tool()),

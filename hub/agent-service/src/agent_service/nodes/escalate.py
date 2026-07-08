@@ -1,6 +1,6 @@
 from loguru import logger
 
-from agent_service.utils import invoke_tool as _invoke_tool
+from agent_service.utils import mcp_call as _mcp_call
 
 _PRIORITY_MAP = {"critical": 1, "high": 2, "medium": 3, "low": 4}
 
@@ -53,7 +53,7 @@ async def escalate_node(state) -> dict:
 
     logger.info(f"Creating ServiceNow incident: {short_description}")
     try:
-        response = await _invoke_tool("create_incident", {
+        response = await _mcp_call("servicenow", "create_incident", {
             "short_description": short_description,
             "description": description,
             "priority": priority,

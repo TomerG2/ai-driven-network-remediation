@@ -39,6 +39,15 @@ GRAPH_INVOKE_TIMEOUT_SECONDS = float(os.getenv("GRAPH_INVOKE_TIMEOUT_SECONDS", "
 LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
 LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
 
+# Direct MCP server URLs (bypass LlamaStack for deterministic tool calls)
+MCP_AAP_URL = os.getenv("MCP_AAP_URL", "http://mcp-noc-aap:8000")
+MCP_SERVICENOW_URL = os.getenv("MCP_SERVICENOW_URL", "http://mcp-noc-servicenow:8000")
+
+MCP_URLS: dict[str, str] = {
+    "aap": MCP_AAP_URL,
+    "servicenow": MCP_SERVICENOW_URL,
+}
+
 # Lightspeed (Ansible Lightspeed playbook generation)
 LIGHTSPEED_URL = os.getenv("LIGHTSPEED_URL", "")
 LIGHTSPEED_TOKEN = os.getenv("LIGHTSPEED_TOKEN", "")

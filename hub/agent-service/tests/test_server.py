@@ -17,7 +17,7 @@ def client():
             yield test_client
 
 
-async def _mock_escalate_invoke(tool_name, kwargs):
+async def _mock_escalate_invoke(service, tool_name, args):
     if tool_name == "create_incident":
         return {"success": True, "number": "INC0000001"}
     return {}
@@ -39,7 +39,7 @@ class TestReadyEndpoint:
 
 class TestRemediateEndpoint:
     def test_post_remediate_returns_full_state(self, client):
-        with patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", _mock_escalate_invoke):
             response = client.post("/remediate", json={"raw_event": "test event"})
         assert response.status_code == 200
         body = response.json()

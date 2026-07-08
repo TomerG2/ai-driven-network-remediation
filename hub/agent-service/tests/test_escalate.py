@@ -22,14 +22,14 @@ def _stub_rca(**overrides):
 def _make_capture_invoke(number="INC0012345"):
     captured = {}
 
-    async def _capture_invoke(tool_name, kwargs):
-        captured.update({"tool_name": tool_name, "kwargs": kwargs})
+    async def _capture_invoke(service, tool_name, args):
+        captured.update({"service": service, "tool_name": tool_name, "kwargs": args})
         return {"success": True, "number": number}
 
     return captured, _capture_invoke
 
 
-async def _fake_invoke(tool_name, kwargs):
+async def _fake_invoke(service, tool_name, args):
     if tool_name == "create_incident":
         return {"success": True, "number": "INC0012345"}
     return {}
@@ -38,14 +38,14 @@ async def _fake_invoke(tool_name, kwargs):
 class TestEscalateHappyPath:
     async def test_creates_servicenow_ticket(self):
         state = make_state(root_cause_analysis=_stub_rca())
-        with patch("agent_service.nodes.escalate._invoke_tool", _fake_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", _fake_invoke):
             result = await escalate_node(state)
 
         assert result["servicenow_ticket"] == "INC0012345"
 
     async def test_does_not_set_decision(self):
         state = make_state(root_cause_analysis=_stub_rca())
-        with patch("agent_service.nodes.escalate._invoke_tool", _fake_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", _fake_invoke):
             result = await escalate_node(state)
 
         assert "decision" not in result
@@ -54,9 +54,10 @@ class TestEscalateHappyPath:
         state = make_state(root_cause_analysis=_stub_rca())
         captured, capture_invoke = _make_capture_invoke()
 
-        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", capture_invoke):
             await escalate_node(state)
 
+        assert captured["service"] == "servicenow"
         assert captured["tool_name"] == "create_incident"
         expected_desc = "[AI-NOC] CrashLoopBackOff – nginx-abc123 in prod (edge-1)"
         assert captured["kwargs"]["short_description"] == expected_desc
@@ -65,7 +66,7 @@ class TestEscalateHappyPath:
         state = make_state(root_cause_analysis=_stub_rca())
         captured, capture_invoke = _make_capture_invoke()
 
-        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
@@ -81,7 +82,7 @@ class TestPriorityMapping:
         state = make_state(root_cause_analysis=_stub_rca(estimated_severity=severity))
         captured, capture_invoke = _make_capture_invoke(number="INC0099")
 
-        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", capture_invoke):
             await escalate_node(state)
 
         return captured["kwargs"]["priority"]
@@ -103,10 +104,10 @@ class TestEscalateErrorHandling:
     async def test_servicenow_failure_returns_empty_ticket(self):
         state = make_state(root_cause_analysis=_stub_rca())
 
-        async def _fail_invoke(tool_name, kwargs):
+        async def _fail_invoke(service, tool_name, args):
             return {"success": False, "error": "connection refused"}
 
-        with patch("agent_service.nodes.escalate._invoke_tool", _fail_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", _fail_invoke):
             result = await escalate_node(state)
 
         assert result["servicenow_ticket"] == ""
@@ -115,10 +116,10 @@ class TestEscalateErrorHandling:
     async def test_servicenow_exception_returns_empty_ticket(self):
         state = make_state(root_cause_analysis=_stub_rca())
 
-        async def _explode_invoke(tool_name, kwargs):
+        async def _explode_invoke(service, tool_name, args):
             raise ConnectionError("MCP server unreachable")
 
-        with patch("agent_service.nodes.escalate._invoke_tool", _explode_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", _explode_invoke):
             result = await escalate_node(state)
 
         assert result["servicenow_ticket"] == ""
@@ -127,11 +128,11 @@ class TestEscalateErrorHandling:
     async def test_servicenow_failure_logs_warning(self):
         state = make_state(root_cause_analysis=_stub_rca())
 
-        async def _fail_invoke(tool_name, kwargs):
+        async def _fail_invoke(service, tool_name, args):
             return {"success": False, "error": "connection refused"}
 
         with (
-            patch("agent_service.nodes.escalate._invoke_tool", _fail_invoke),
+            patch("agent_service.nodes.escalate._mcp_call", _fail_invoke),
             patch("agent_service.nodes.escalate.logger") as mock_logger,
         ):
             await escalate_node(state)
@@ -152,7 +153,7 @@ class TestEscalateFailedAttempts:
         )
         captured, capture_invoke = _make_capture_invoke()
 
-        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
@@ -164,7 +165,7 @@ class TestEscalateFailedAttempts:
         state = make_state(root_cause_analysis=_stub_rca(), failed_attempts=[])
         captured, capture_invoke = _make_capture_invoke()
 
-        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
@@ -180,7 +181,7 @@ class TestEscalateFailedAttempts:
         )
         captured, capture_invoke = _make_capture_invoke()
 
-        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+        with patch("agent_service.nodes.escalate._mcp_call", capture_invoke):
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
