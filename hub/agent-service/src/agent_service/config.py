@@ -5,8 +5,6 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-import httpx
-
 from agent_service.kafka.alerts import ALERT_TOPICS
 
 _DEFAULT_CONSUME_TOPICS = ",".join(sorted(ALERT_TOPICS))
@@ -81,19 +79,6 @@ AAP_LIGHTSPEED_TEMPLATE = os.getenv(
 
 HTTP_TIMEOUT_SECONDS = 30
 LIGHTSPEED_TIMEOUT_SECONDS = 60
-
-_http_client: httpx.AsyncClient | None = None
-
-
-def get_http_client() -> httpx.AsyncClient:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.AsyncClient(
-            base_url=f"http://{LLAMASTACK_HOST}:{LLAMASTACK_PORT}",
-            timeout=HTTP_TIMEOUT_SECONDS,
-        )
-    return _http_client
-
 
 # AAP job polling
 TERMINAL_STATUSES = frozenset({"successful", "failed", "error", "canceled"})

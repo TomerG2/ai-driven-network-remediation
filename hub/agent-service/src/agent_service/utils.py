@@ -2,7 +2,7 @@ import json
 
 import httpx
 
-from agent_service.config import HTTP_TIMEOUT_SECONDS, MCP_URLS, get_http_client
+from agent_service.config import HTTP_TIMEOUT_SECONDS, MCP_URLS
 
 _MCP_HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -70,25 +70,3 @@ async def mcp_call(service: str, tool_name: str, args: dict | None = None) -> di
         return json.loads(text)
     except (json.JSONDecodeError, TypeError):
         return {"success": False, "error": f"unparseable response: {text[:200]}"}
-
-
-async def invoke_tool(tool_name: str, kwargs: dict) -> dict:
-    """Call an MCP tool via LlamaStack's /v1/tool-runtime/invoke endpoint."""
-    resp = await get_http_client().post(
-        "/v1/tool-runtime/invoke",
-        json={"tool_name": tool_name, "kwargs": kwargs},
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    if data.get("error_message"):
-        return {"success": False, "error": data["error_message"]}
-    content = data.get("content", "")
-    try:
-        if isinstance(content, str):
-            return json.loads(content) if content else {}
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                return json.loads(item["text"])
-    except json.JSONDecodeError:
-        return {"success": False, "error": f"unparseable response: {str(content)[:200]}"}
-    return {}

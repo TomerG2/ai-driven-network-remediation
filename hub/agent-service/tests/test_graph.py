@@ -37,44 +37,6 @@ def _rag_stub(state: dict) -> dict:
     return {"context_snippets": ["stub snippet"], "rag_query_used": query}
 
 
-def _mock_invoke_tool(launch=None, status=None, output=None, upsert=None):
-    async def _invoke(tool_name, kwargs):
-        if tool_name == "upsert_job_template":
-            return upsert or {
-                "success": True,
-                "template_id": 99,
-                "created": True,
-                "template_name": kwargs.get("template_name", ""),
-                "playbook": kwargs.get("playbook", ""),
-            }
-        if tool_name == "launch_job":
-            return launch or {
-                "success": True,
-                "job_id": 42,
-                "status": "pending",
-                "template_name": "restart-pod",
-            }
-        if tool_name == "get_job_status":
-            return status or {
-                "success": True,
-                "job_id": 42,
-                "status": "successful",
-                "elapsed": 5.0,
-                "finished": "2024-01-01T00:01:00Z",
-                "failed": False,
-                "result_traceback": "",
-            }
-        if tool_name == "get_job_output":
-            return output or {
-                "success": True,
-                "job_id": 42,
-                "output": "PLAY OK",
-            }
-        return {}
-
-    return _invoke
-
-
 def _mock_mcp_call_aap(launch=None, status=None, output=None, upsert=None):
     async def _invoke(service, tool_name, args):
         if tool_name == "upsert_job_template":
