@@ -32,8 +32,15 @@ spec:
           command: ["sh", "-c"]
           args:
             - |
+              retries=0
+              max_retries=60
               until curl -sf http://{{ .Values.ingestionPipeline.llamastackHost }}:{{ index .Values "llama-stack" "port" }}/v1/models; do
-                echo "Waiting for LlamaStack..."
+                retries=$((retries + 1))
+                if [ $retries -ge $max_retries ]; then
+                  echo "LlamaStack not ready after $max_retries attempts — proceeding anyway (auto-ingest will retry)"
+                  exit 0
+                fi
+                echo "Waiting for LlamaStack... ($retries/$max_retries)"
                 sleep 5
               done
       containers:
