@@ -9,7 +9,7 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.models import GraphConfig, RemediationResult
-from agent_service.utils import invoke_tool as _invoke_tool
+from agent_service.utils import mcp_call as _mcp_call
 
 
 async def _launch_job(template: str, log_event) -> dict:
@@ -20,10 +20,10 @@ async def _launch_job(template: str, log_event) -> dict:
         "container": log_event.container,
         "edge_site_id": log_event.edge_site_id,
     }
-    return await _invoke_tool(
-        "launch_job",
-        {"job_template_name": template, "extra_vars": extra_vars},
-    )
+    return await _mcp_call("aap", "launch_job", {
+        "job_template_name": template,
+        "extra_vars": extra_vars,
+    })
 
 
 async def _handle_completion(template: str, job_id: int, state, config):
@@ -122,7 +122,7 @@ async def _poll_job(job_id: int, timeout: float) -> dict | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            status = await _invoke_tool("get_job_status", {"job_id": job_id})
+            status = await _mcp_call("aap", "get_job_status", {"job_id": job_id})
         except Exception:
             logger.exception("Failed to poll job status")
             return None
@@ -137,7 +137,7 @@ async def _poll_job(job_id: int, timeout: float) -> dict | None:
 
 async def _get_output(job_id: int) -> str:
     try:
-        result = await _invoke_tool("get_job_output", {"job_id": job_id})
+        result = await _mcp_call("aap", "get_job_output", {"job_id": job_id})
         return result.get("output", "")
     except Exception:
         logger.exception("Failed to get job output")

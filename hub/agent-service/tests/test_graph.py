@@ -75,6 +75,36 @@ def _mock_invoke_tool(launch=None, status=None, output=None, upsert=None):
     return _invoke
 
 
+def _mock_mcp_call_aap(launch=None, status=None, output=None):
+    async def _invoke(service, tool_name, args):
+        if tool_name == "launch_job":
+            return launch or {
+                "success": True,
+                "job_id": 42,
+                "status": "pending",
+                "template_name": "restart-pod",
+            }
+        if tool_name == "get_job_status":
+            return status or {
+                "success": True,
+                "job_id": 42,
+                "status": "successful",
+                "elapsed": 5.0,
+                "finished": "2024-01-01T00:01:00Z",
+                "failed": False,
+                "result_traceback": "",
+            }
+        if tool_name == "get_job_output":
+            return output or {
+                "success": True,
+                "job_id": 42,
+                "output": "PLAY OK",
+            }
+        return {}
+
+    return _invoke
+
+
 _STUB_LOG_EVENT = LogEvent(
     timestamp="2024-01-01T00:00:00Z",
     message="pod crash",
@@ -88,7 +118,7 @@ _STUB_LOG_EVENT = LogEvent(
 )
 
 
-async def _slow_invoke(tool_name, kwargs):
+async def _slow_invoke(service, tool_name, args):
     if tool_name == "launch_job":
         return {"success": True, "job_id": 99}
     if tool_name == "get_job_status":
@@ -135,7 +165,7 @@ def _patch_graph_nodes():
     with (
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
-        patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
+        patch("agent_service.nodes.remediate._mcp_call", _mock_mcp_call_aap()),
         patch("agent_service.nodes.escalate._mcp_call", _mock_escalate_invoke),
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
         patch("agent_service.nodes.lightspeed._call_ols", _ols_mock),
@@ -341,8 +371,8 @@ class TestRemediateNode:
             root_cause_analysis=_STUB_RCA,
         )
         with patch(
-            "agent_service.nodes.remediate._invoke_tool",
-            _mock_invoke_tool(),
+            "agent_service.nodes.remediate._mcp_call",
+            _mock_mcp_call_aap(),
         ):
             result = await node(state)
 
@@ -364,8 +394,8 @@ class TestRemediateNode:
             should_retry=True,
         )
         with patch(
-            "agent_service.nodes.remediate._invoke_tool",
-            _mock_invoke_tool(),
+            "agent_service.nodes.remediate._mcp_call",
+            _mock_mcp_call_aap(),
         ):
             result = await node(state)
 
@@ -380,8 +410,8 @@ class TestRemediateNode:
             log_event=_STUB_LOG_EVENT,
             root_cause_analysis=_STUB_RCA,
         )
-        mock = _mock_invoke_tool(launch={"success": False, "error": "template not found"})
-        with patch("agent_service.nodes.remediate._invoke_tool", mock):
+        mock = _mock_mcp_call_aap(launch={"success": False, "error": "template not found"})
+        with patch("agent_service.nodes.remediate._mcp_call", mock):
             result = await node(state)
 
         assert result["remediation_result"].success is False
@@ -397,7 +427,7 @@ class TestRemediateNode:
             log_event=_STUB_LOG_EVENT,
             root_cause_analysis=_STUB_RCA,
         )
-        mock = _mock_invoke_tool(
+        mock = _mock_mcp_call_aap(
             status={
                 "success": True,
                 "job_id": 42,
@@ -408,7 +438,7 @@ class TestRemediateNode:
                 "result_traceback": "task failed",
             }
         )
-        with patch("agent_service.nodes.remediate._invoke_tool", mock):
+        with patch("agent_service.nodes.remediate._mcp_call", mock):
             result = await node(state)
 
         assert result["remediation_result"].success is False
@@ -424,7 +454,7 @@ class TestRemediateNode:
             root_cause_analysis=_STUB_RCA,
         )
         with (
-            patch("agent_service.nodes.remediate._invoke_tool", _slow_invoke),
+            patch("agent_service.nodes.remediate._mcp_call", _slow_invoke),
             patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01),
         ):
             result = await node(state)
@@ -447,7 +477,7 @@ class TestRemediateNode:
             should_retry=True,
         )
         with (
-            patch("agent_service.nodes.remediate._invoke_tool", _slow_invoke),
+            patch("agent_service.nodes.remediate._mcp_call", _slow_invoke),
             patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01),
         ):
             result = await node(state)
@@ -466,8 +496,8 @@ class TestRemediateNode:
             root_cause_analysis=_STUB_RCA,
             failed_attempts=[{"action": "remediate", "template": "x", "error": "prev"}],
         )
-        mock = _mock_invoke_tool(launch={"success": False, "error": "still broken"})
-        with patch("agent_service.nodes.remediate._invoke_tool", mock):
+        mock = _mock_mcp_call_aap(launch={"success": False, "error": "still broken"})
+        with patch("agent_service.nodes.remediate._mcp_call", mock):
             result = await node(state)
 
         assert result["remediation_result"].success is False
@@ -492,8 +522,8 @@ class TestRemediateNode:
             root_cause_analysis=rca,
         )
         with patch(
-            "agent_service.nodes.remediate._invoke_tool",
-            _mock_invoke_tool(),
+            "agent_service.nodes.remediate._mcp_call",
+            _mock_mcp_call_aap(),
         ):
             result = await node(state)
 
