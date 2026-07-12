@@ -8,6 +8,7 @@ from loguru import logger
 from agent_service.config import (
     AAP_LIGHTSPEED_TEMPLATE,
     LIGHTSPEED_PROMPT_TEMPLATE,
+    LIGHTSPEED_SKIP_AAP,
     LIGHTSPEED_TIMEOUT_SECONDS,
     LIGHTSPEED_TOKEN,
     LIGHTSPEED_URL,
@@ -219,12 +220,15 @@ async def lightspeed_node(state) -> dict:
         return {"decision": "lightspeed", "remediation_result": result}
 
     try:
-        result = await _execute_in_aap(
-            result,
-            playbook_name,
-            playbook_yaml,
-            log_event,
-        )
+        if LIGHTSPEED_SKIP_AAP:
+            logger.info("LIGHTSPEED_SKIP_AAP=true, skipping AAP execution for '{}'", playbook_name)
+        else:
+            result = await _execute_in_aap(
+                result,
+                playbook_name,
+                playbook_yaml,
+                log_event,
+            )
     except Exception:
         logger.exception("AAP execution failed for playbook '{}'", playbook_name)
         result = result.model_copy(

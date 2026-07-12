@@ -84,29 +84,42 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
     now = datetime.now(timezone.utc).isoformat()
     normalized = scenario.strip().lower()
 
-    scenarios = {
-        "oom": ("OOMKilled: container exceeded memory limits", "nginx-edge-oom"),
-        "lightspeed": ("Ansible playbook generation requested for edge recovery", "nginx-edge-lightspeed"),
-        "escalation": ("Kernel panic and persistent data corruption - requires human escalation", "edge-core-critical"),
+    scenarios: dict[str, dict[str, Any]] = {
+        "oom": {
+            "message": "OOMKilled: container exceeded memory limits",
+            "pod_name": "nginx-edge-oom",
+        },
+        "lightspeed": {
+            "message": "Ansible playbook generation requested for edge recovery",
+            "pod_name": "nginx-edge-lightspeed",
+            "confidence_override": 0.95,
+            "failure_type_override": "DNSFailure",
+        },
+        "escalation": {
+            "message": "Kernel panic and persistent data corruption - requires human escalation",
+            "pod_name": "edge-core-critical",
+            "confidence_override": 0.3,
+            "failure_type_override": "Unknown",
+        },
     }
-    message, pod_name = scenarios.get(
+    spec = scenarios.get(
         normalized,
-        (
-            "CrashLoopBackOff: nginx configuration test failed",
-            "nginx-edge-crashloop",
-        ),
+        {
+            "message": "CrashLoopBackOff: nginx configuration test failed",
+            "pod_name": "nginx-edge-crashloop",
+        },
     )
     if normalized not in scenarios:
         normalized = "crashloop"
 
-    return {
+    event: dict[str, Any] = {
         "@timestamp": now,
         "incident_id": incident_id,
-        "message": message,
+        "message": spec["message"],
         "level": "error",
         "kubernetes": {
             "namespace_name": "dark-noc-edge",
-            "pod_name": pod_name,
+            "pod_name": spec["pod_name"],
             "container_name": "nginx",
         },
         "labels": {
@@ -115,6 +128,12 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
             "dark_noc_scenario": normalized,
         },
     }
+    if "confidence_override" in spec:
+        event["_overrides"] = {
+            "confidence_override": spec["confidence_override"],
+            "failure_type_override": spec["failure_type_override"],
+        }
+    return event
 
 
 def publish_demo_event(event: dict[str, Any]) -> int:

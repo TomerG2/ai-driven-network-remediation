@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -33,6 +34,21 @@ from agent_service.kafka.consumer import AlertConsumer, AlertMessage
 from agent_service.models import FailureType, IncidentState
 
 
+def _extract_overrides(raw_event: str) -> dict:
+    """Extract confidence/failure_type overrides embedded in the Kafka event JSON."""
+    try:
+        parsed = json.loads(raw_event)
+        overrides = parsed.get("_overrides") or {}
+        result: dict = {}
+        if "confidence_override" in overrides:
+            result["confidence_override"] = float(overrides["confidence_override"])
+        if "failure_type_override" in overrides:
+            result["failure_type_override"] = overrides["failure_type_override"]
+        return result
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return {}
+
+
 def _invoke_graph_for_alert(
     alert: AlertMessage,
     graph,
@@ -43,13 +59,14 @@ def _invoke_graph_for_alert(
         alert.topic,
         alert.offset,
     )
+    input_state: dict = {
+        "raw_event": alert.raw_event,
+        "kafka_offset": alert.offset,
+    }
+    input_state.update(_extract_overrides(alert.raw_event))
+
     future = asyncio.run_coroutine_threadsafe(
-        graph.ainvoke(
-            {
-                "raw_event": alert.raw_event,
-                "kafka_offset": alert.offset,
-            }
-        ),
+        graph.ainvoke(input_state),
         loop,
     )
     try:
