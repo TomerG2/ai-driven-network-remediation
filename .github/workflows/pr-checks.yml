@@ -12,8 +12,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  trust-gate:
+    name: Trust gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR author trust
+        if: github.event_name == 'pull_request_target'
+        env:
+          AUTHOR_ASSOC: ${{ github.event.pull_request.author_association }}
+        run: |
+          case "${AUTHOR_ASSOC}" in
+            OWNER|MEMBER|COLLABORATOR) echo "Trusted author"; exit 0 ;;
+            *) echo "::error::Untrusted PR author (${AUTHOR_ASSOC}). A maintainer must review the changes and re-run this workflow."; exit 1 ;;
+          esac
+
   e2e-tests:
-    if: github.repository == 'rh-ai-quickstart/ai-driven-network-remediation'
+    needs: [trust-gate]
     name: Run e2e tests
     runs-on: ubuntu-latest
     steps:
