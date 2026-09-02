@@ -20,7 +20,7 @@ ranAnomalyDetector:
     kafkaConsumerEnabled: "true"
     kafkaAnomaliesTopic: "ran-anomalies"
     kafkaProducerEnabled: "true"
-    historyWindowSize: "10"
+    detectInferenceUrl: ""
     recentAnomaliesLimit: "100"
   service:
     type: ClusterIP
