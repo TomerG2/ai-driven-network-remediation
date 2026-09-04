@@ -21,7 +21,7 @@ def test_summary(mock_snow, client):
     assert data["_deps"] == {"status": "ok"}
     assert data["agent_status"] == "running"
     assert data["cluster"] == "hub"
-    assert data["site"] == "edge-01"
+    assert data["site"] == "edge-site-01"
     assert data["open_incidents"] == 3
     assert data["servicenow"] == {"reachable": True}
     assert "timestamp" in data
@@ -89,7 +89,7 @@ def test_integrations_kafka_unreachable(mock_probe, mock_audits, client):
 @patch("chatbot_service.publish_demo_event")
 def test_demo_trigger(mock_publish, client):
     mock_publish.return_value = 42
-    resp = client.post("/api/demo/trigger", json={"scenario": "oom", "site": "edge-01"})
+    resp = client.post("/api/demo/trigger", json={"scenario": "oom", "site": "edge-site-01"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["_deps"] == {"status": "ok"}
@@ -104,7 +104,7 @@ def test_demo_trigger(mock_publish, client):
 @patch("chatbot_service.publish_demo_event")
 def test_demo_trigger_crashloop(mock_publish, client):
     mock_publish.return_value = 10
-    resp = client.post("/api/demo/trigger", json={"scenario": "crashloop", "site": "edge-01"})
+    resp = client.post("/api/demo/trigger", json={"scenario": "crashloop", "site": "edge-site-01"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["_deps"] == {"status": "ok"}
@@ -115,7 +115,7 @@ def test_demo_trigger_crashloop(mock_publish, client):
 @patch("chatbot_service.publish_demo_event")
 def test_demo_trigger_kafka_failure(mock_publish, client):
     mock_publish.side_effect = Exception("Kafka unreachable")
-    resp = client.post("/api/demo/trigger", json={"scenario": "oom", "site": "edge-01"})
+    resp = client.post("/api/demo/trigger", json={"scenario": "oom", "site": "edge-site-01"})
     assert resp.status_code == 502
     data = resp.json()
     assert data["status"] == "error"

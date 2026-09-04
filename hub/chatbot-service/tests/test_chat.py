@@ -32,7 +32,7 @@ class TestBuildChatContextWithNoIncidentHistory:
 
         integrations_data = _integrations_data(slo)
 
-        prompt = build_chat_context("Any incidents?", {"site": "edge-01"}, integrations_data, [])
+        prompt = build_chat_context("Any incidents?", {"site": "edge-site-01"}, integrations_data, [])
 
         assert "n/a" in prompt
 
@@ -40,7 +40,7 @@ class TestBuildChatContextWithNoIncidentHistory:
         slo = compute_slo_metrics(records=[], up_count=5, total_count=5)
         integrations_data = _integrations_data(slo)
 
-        reply = format_chat_reply("Any incidents?", "All quiet.", {"site": "edge-01"}, integrations_data)
+        reply = format_chat_reply("Any incidents?", "All quiet.", {"site": "edge-site-01"}, integrations_data)
 
         assert "No recent remediation events." in reply
 
@@ -60,6 +60,6 @@ class TestBuildChatContextWithIncidentHistory:
         slo = compute_slo_metrics(records, up_count=5, total_count=5)
         integrations_data = _integrations_data(slo)
 
-        prompt = build_chat_context("Status?", {"site": "edge-01"}, integrations_data, [])
+        prompt = build_chat_context("Status?", {"site": "edge-site-01"}, integrations_data, [])
 
         assert "Auto-remediation rate: 100%" in prompt

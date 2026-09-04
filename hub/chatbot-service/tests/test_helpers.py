@@ -54,7 +54,7 @@ class TestNormalizeIncidentRecord:
         result = normalize_incident_record(payload)
         assert result["failure_type"] == "unknown"
         assert result["remediation_action"] == "detected"
-        assert result["edge_site_id"] == "edge-01"
+        assert result["edge_site_id"] == "edge-site-01"
         assert result["ai_confidence"] == 0
 
 
@@ -107,7 +107,7 @@ class TestBuildIncidentMovie:
                 "timestamp": "2026-06-14T10:00:00+00:00",
                 "incident_id": "inc-1",
                 "failure_type": "oom",
-                "edge_site_id": "edge-01",
+                "edge_site_id": "edge-site-01",
                 "remediation_action": "restart",
                 "remediation_success": True,
                 "servicenow_ticket": "",
@@ -119,7 +119,7 @@ class TestBuildIncidentMovie:
                 "timestamp": "2026-06-14T09:00:00+00:00",
                 "incident_id": "inc-2",
                 "failure_type": "crashloop",
-                "edge_site_id": "edge-01",
+                "edge_site_id": "edge-site-01",
                 "remediation_action": "escalated",
                 "remediation_success": False,
                 "servicenow_ticket": "INC123",
@@ -139,11 +139,11 @@ class TestBuildIncidentMovie:
 
 class TestBuildDemoEvent:
     def test_crashloop(self):
-        event = build_demo_event("crashloop", "edge-01", "test-id-1")
+        event = build_demo_event("crashloop", "edge-site-01", "test-id-1")
         assert event["labels"]["dark_noc_scenario"] == "crashloop"
         assert "CrashLoopBackOff" in event["message"]
         assert event["kubernetes"]["namespace_name"] == "dark-noc-edge"
-        assert event["labels"]["edge_site_id"] == "edge-01"
+        assert event["labels"]["edge_site_id"] == "edge-site-01"
         assert event["incident_id"] == "test-id-1"
 
     def test_oom(self):
@@ -153,15 +153,15 @@ class TestBuildDemoEvent:
         assert event["labels"]["edge_site_id"] == "edge-02"
 
     def test_lightspeed(self):
-        event = build_demo_event("lightspeed", "edge-01", "test-id-3")
+        event = build_demo_event("lightspeed", "edge-site-01", "test-id-3")
         assert event["labels"]["dark_noc_scenario"] == "lightspeed"
         assert "playbook" in event["message"].lower()
 
     def test_escalation(self):
-        event = build_demo_event("escalation", "edge-01", "test-id-4")
+        event = build_demo_event("escalation", "edge-site-01", "test-id-4")
         assert event["labels"]["dark_noc_scenario"] == "escalation"
         assert "escalation" in event["message"].lower()
 
     def test_unknown_scenario_defaults_to_crashloop(self):
-        event = build_demo_event("unknown-thing", "edge-01", "test-id-5")
+        event = build_demo_event("unknown-thing", "edge-site-01", "test-id-5")
         assert event["labels"]["dark_noc_scenario"] == "crashloop"

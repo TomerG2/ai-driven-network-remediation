@@ -22,7 +22,7 @@ pytestmark = pytest.mark.network
 # Demo scenarios without _overrides invoke Granite LLM analysis and can exceed the
 # agent graph timeout in CI before audit_node runs. lightspeed embeds confidence overrides.
 _DEMO_SCENARIO = "lightspeed"
-_DEMO_SITE = "edge-01"
+_DEMO_SITE = "edge-site-01"
 
 # Buffer for Kafka consume lag; lightspeed path completes in seconds when overrides apply.
 _AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "120"))

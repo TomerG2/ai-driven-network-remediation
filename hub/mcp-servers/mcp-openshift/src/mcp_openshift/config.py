@@ -21,7 +21,7 @@ SPOKE_NAME_PREFIX = os.getenv("SPOKE_NAME_PREFIX", "edge-site")
 DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "single-cluster")
 DEFAULT_NAMESPACE = os.getenv("DEFAULT_NAMESPACE", "dark-noc-edge")
 
-_EDGE_SITE_LABEL = re.compile(r"^edge-(\d+)$")
+_EDGE_SITE_LABEL = re.compile(r"^edge(?:-site)?-(\d+)$")
 # Spoke directory names must be path-safe (no / or ..); matches topology scalars.
 _SAFE_SPOKE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -35,7 +35,7 @@ def site_id_to_spoke_name(
 
     edge-01 → edge-site-01 (default prefix; zero-padded)
     edge-1 → edge-site-01 (normalized)
-    edge-site-01 → edge-site-01 (already a spoke name)
+    edge-site-01 → edge-site-01 (already a spoke name; also matched by _EDGE_SITE_LABEL)
 
     Unknown or unsafe values return "" (never echo caller input into paths).
     """

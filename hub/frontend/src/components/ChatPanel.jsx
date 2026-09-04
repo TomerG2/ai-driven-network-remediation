@@ -5,7 +5,7 @@ const EXEC_HEADERS = ["Summary", "MCP Status", "Model Output", "Next Action"];
 const QUICK_ASKS = [
   "Executive summary of current incident posture",
   "MCP health status across all integrations",
-  "Current remediation status for edge-01",
+  "Current remediation status for edge-site-01",
   "Provide ticket and Slack notification trace status",
 ];
 

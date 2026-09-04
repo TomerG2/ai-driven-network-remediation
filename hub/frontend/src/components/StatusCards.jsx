@@ -27,7 +27,7 @@ export function StatusCards({ summary, integrations, deps }) {
   return (
     <section className="grid">
       <StatusCard title="Agent Runtime" value={summary.agent_status || "unknown"} />
-      <StatusCard title="Edge Site" value={summary.site || "edge-01"} />
+      <StatusCard title="Edge Site" value={summary.site || "edge-site-01"} />
       <StatusCard
         title="Open Incidents"
         value={incidentValue}

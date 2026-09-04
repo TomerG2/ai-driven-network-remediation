@@ -19,6 +19,7 @@ from mcp_openshift.tools import get_pods
         ("edge-site-1", "edge-site", "edge-site-01"),
         ("edge-01", "spoke", "spoke-01"),
         ("spoke-01", "spoke", "spoke-01"),
+        ("edge-site-01", "spoke", "spoke-01"),
         ("", "edge-site", ""),
         ("unknown", "edge-site", ""),
         ("  edge-03  ", "edge-site", "edge-site-03"),

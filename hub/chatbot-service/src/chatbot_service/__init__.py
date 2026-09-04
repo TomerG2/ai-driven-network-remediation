@@ -75,7 +75,7 @@ class ChatRequest(BaseModel):
 
 class DemoTriggerRequest(BaseModel):
     scenario: str = "crashloop"
-    site: str = "edge-01"
+    site: str = "edge-site-01"
 
 
 # ── Integrations Builder ──────────────────────────────────────────
@@ -179,7 +179,7 @@ async def summary() -> dict:
         "timestamp": utc_now(),
         "agent_status": "running",
         "cluster": "hub",
-        "site": "edge-01",
+        "site": "edge-site-01",
         "open_incidents": tickets,
         "servicenow": servicenow_info,
     }

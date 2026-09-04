@@ -78,7 +78,7 @@ def test_demo_trigger(chatbot_client):
     """Demo trigger queues a Kafka event (may fail if Kafka is unreachable)."""
     response = chatbot_client.post(
         "/api/demo/trigger",
-        json={"scenario": "crashloop", "site": "edge-01"},
+        json={"scenario": "crashloop", "site": "edge-site-01"},
     )
     data = response.json()
     if response.status_code == 200:

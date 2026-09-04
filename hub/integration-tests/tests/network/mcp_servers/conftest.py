@@ -7,7 +7,7 @@ import pytest
 from tests.generic.mcp_servers.conftest import mcp_call
 
 _SERVICE_READY_TIMEOUT = int(os.environ.get("SERVICE_READY_TIMEOUT", "90"))
-_DEFAULT_HUB_SPOKE_SITE_ID = "edge-01"
+_DEFAULT_HUB_SPOKE_SITE_ID = "edge-site-01"
 
 
 def _wait_for_health(base_url: str) -> None:

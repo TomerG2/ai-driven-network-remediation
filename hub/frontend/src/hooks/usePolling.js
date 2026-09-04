@@ -22,7 +22,7 @@ export function usePolling(baseUrl) {
   const [summary, setSummary] = useState({
     agent_status: "unknown",
     cluster: "hub",
-    site: "edge-01",
+    site: "edge-site-01",
     open_incidents: 0,
     servicenow: { mode: "unknown", reachable: false },
     timestamp: "",

@@ -23,7 +23,7 @@ export function DemoTrigger({ baseUrl }) {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario, site: "edge-01" }),
+        body: JSON.stringify({ scenario, site: "edge-site-01" }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

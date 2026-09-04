@@ -30,7 +30,7 @@ _LOG_EVENT = LogEvent(
     namespace="dark-noc-edge",
     pod_name="nginx-edge-oom",
     container="nginx",
-    edge_site_id="edge-01",
+    edge_site_id="edge-site-01",
     kafka_offset=7,
     raw="{}",
 )
@@ -132,7 +132,7 @@ class TestBuildAuditPayload:
         assert payload["incident_id"] == "550e8400-e29b-41d4-a716-446655440000"
         assert payload["failure_type"] == "OOMKilled"
         assert payload["severity"] == "high"
-        assert payload["edge_site_id"] == "edge-01"
+        assert payload["edge_site_id"] == "edge-site-01"
         assert payload["ai_confidence"] == 0.92
         assert payload["remediation_action"] == "restart-nginx"
         assert payload["remediation_success"] is True

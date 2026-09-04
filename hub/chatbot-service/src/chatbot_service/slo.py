@@ -31,7 +31,7 @@ def normalize_incident_record(payload: dict[str, Any]) -> dict[str, Any]:
     aap_job_id = str(event.get("aap_job_id") or payload.get("aap_job_id") or "")
     confidence = float(event.get("ai_confidence") or payload.get("ai_confidence") or 0)
     duration_ms = float(event.get("total_duration_ms") or payload.get("total_duration_ms") or 0)
-    edge_site = str(event.get("edge_site_id") or payload.get("edge_site_id") or labels.get("edge_site_id") or "edge-01")
+    edge_site = str(event.get("edge_site_id") or payload.get("edge_site_id") or labels.get("edge_site_id") or "edge-site-01")
 
     ts_raw = ""
     for key in ("timestamp", "@timestamp", "time", "ts"):
@@ -173,7 +173,7 @@ def build_incident_movie(
             {
                 "timestamp": ts.isoformat() if ts else str(rec.get("timestamp", "")),
                 "incident_id": str(rec.get("incident_id", "n/a")),
-                "title": f"{rec.get('failure_type', 'unknown')} on {rec.get('edge_site_id', 'edge-01')}",
+                "title": f"{rec.get('failure_type', 'unknown')} on {rec.get('edge_site_id', 'edge-site-01')}",
                 "stage": stage,
                 "summary": f"Action: {action} · Result: {'success' if success else 'failed'}",
                 "artifacts": {
