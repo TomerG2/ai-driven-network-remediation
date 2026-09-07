@@ -21,6 +21,7 @@ ranAnomalyDetector:
     kafkaAnomaliesTopic: "ran-anomalies"
     kafkaProducerEnabled: "true"
     detectInferenceUrl: ""
+    detectCiMode: "false"
     recentAnomaliesLimit: "100"
   service:
     type: ClusterIP

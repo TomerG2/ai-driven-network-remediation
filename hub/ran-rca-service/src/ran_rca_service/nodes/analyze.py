@@ -39,12 +39,15 @@ _RESPONSE_SCHEMA = {
 async def analyze_node(state: RCAState) -> dict:
     context = "\n---\n".join(state.context_snippets or [])[:_MAX_CONTEXT_CHARS]
 
+    kpi_summary = state.kpi_summary()
     user_content = (
         f"Incident: {state.incident_id}\n"
         f"Zone: {state.zone}, Application: {state.application}\n"
         f"AD Label: {state.ad_label}, Confidence: {state.ad_confidence:.3f}\n"
-        f"KPI Window: 128 timesteps x 18 channels (TelecomTS 5G lab trace)"
+        f"KPI Window: {len(state.kpi_window)} timesteps x 18 channels (TelecomTS 5G lab trace)"
     )
+    if kpi_summary:
+        user_content += f"\n\nPer-channel KPI summary (sorted by variability):\n{kpi_summary}"
     if context:
         user_content += f"\n\nVendor documentation context:\n{context}"
 
