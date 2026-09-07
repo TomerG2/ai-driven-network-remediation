@@ -22,7 +22,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
 
-HF_REPO="${HF_REPO:-rh-ai-quickstart/mantis-ad-telecomts}"
+# TODO: replace with rh-ai-quickstart/mantis-ad-telecomts once the org HF repo is created
+HF_REPO="${HF_REPO:-TomerG2/mantis-ad-telecomts}"
 WEIGHTS_PATH="${WEIGHTS_PATH:-model-serving/training/models/mantis_pretrained_ad.pt}"
 REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
 if [ -z "${VERSION:-}" ]; then

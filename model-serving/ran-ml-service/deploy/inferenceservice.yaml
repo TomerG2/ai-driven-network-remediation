@@ -1,7 +1,7 @@
 # KServe InferenceService for ran-ml-service (Mantis AD predictor).
 #
 # Prerequisites:
-#   1. Weights published to HuggingFace: rh-ai-quickstart/mantis-ad-telecomts
+#   1. Weights published to HuggingFace: TomerG2/mantis-ad-telecomts
 #   2. Predictor image pushed: quay.io/rh-ai-quickstart/noc-ran-ml-service:<tag>
 #
 # Deploy:
@@ -41,7 +41,8 @@ spec:
           - name: MANTIS_MODEL_PATH
             value: /mnt/models/mantis_pretrained_ad.pt
           - name: STORAGE_URI
-            value: hf://rh-ai-quickstart/mantis-ad-telecomts
+            # TODO: replace with rh-ai-quickstart/mantis-ad-telecomts once the org HF repo is created
+            value: hf://TomerG2/mantis-ad-telecomts
         ports:
           - containerPort: 8080
             protocol: TCP
