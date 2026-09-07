@@ -37,6 +37,8 @@ spec:
               value: {{ .Values.ranAnomalyDetector.env.kafkaProducerEnabled | quote }}
             - name: DETECT_INFERENCE_URL
               value: {{ .Values.ranAnomalyDetector.env.detectInferenceUrl | quote }}
+            - name: DETECT_CI_MODE
+              value: {{ .Values.ranAnomalyDetector.env.detectCiMode | quote }}
             - name: RECENT_ANOMALIES_LIMIT
               value: {{ .Values.ranAnomalyDetector.env.recentAnomaliesLimit | quote }}
           ports:

@@ -115,7 +115,7 @@ A presenter clicks "Antenna Failure" in the webapp's Demo Mode panel. Here's wha
    publishes it as JSON to `ran-combined-metrics` with a generated `incident_id`.
 
 2. **`ran-anomaly-detector`** polls that message, deserializes the JSON, extracts the `kpi_window`
-   (128 × 18 values), and POSTs it to `ran-ml-service` (configured via `RAN_ML_SERVICE_URL`):
+   (128 × 18 values), and POSTs it to `ran-ml-service` (configured via `DETECT_INFERENCE_URL`):
    ```
    POST <ran-ml-service-url>/v1/detect
    { "kpi_window": [ /* 128 timestep objects */ ] }
