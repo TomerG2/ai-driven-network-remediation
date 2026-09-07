@@ -76,7 +76,6 @@ runs:
           ENABLE_SERVICENOW_MOCK=true AUTO_INGEST_ON_STARTUP=false \
           HELM_EXTRA_ARGS="\
             --set waitImage=curlimages/curl:8.14.1 \
-<<<<<<< HEAD
             --set network.waitImage=curlimages/curl:8.14.1 \
             --set network.mcpSecrets.openshift.create=true \
             --set-file network.mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
@@ -84,6 +83,7 @@ runs:
             --set network.mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.hub.svc:8080 \
             --set network.mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false \
             --set telco.ranAnomalyDetector.env.detectInferenceUrl='' \
+            --set telco.ranAnomalyDetector.env.detectCiMode=true \
             --set kafka.kafka.storage.storageClass=standard \
             --set kafka.kafka.storage.size=256Mi \
             --set kafka.kafka.retention.hours=1 \
