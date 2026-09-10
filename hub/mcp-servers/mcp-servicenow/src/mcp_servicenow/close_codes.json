@@ -1,0 +1,11 @@
+{
+  "close_code_fallbacks": [
+    "Solved (Permanently)",
+    "Solution provided",
+    "Closed/Resolved by Caller",
+    "Resolved by caller",
+    "Known error",
+    "Duplicate",
+    "Workaround provided"
+  ]
+}

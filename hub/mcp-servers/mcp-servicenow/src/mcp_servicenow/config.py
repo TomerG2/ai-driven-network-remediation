@@ -14,6 +14,7 @@ MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 SNOW_URL = os.getenv("SERVICENOW_URL", "http://servicenow-mock.dark-noc-servicenow-mock.svc:8080").rstrip("/")
 SNOW_USERNAME = os.getenv("SERVICENOW_USERNAME", "admin")
 SNOW_PASSWORD = os.getenv("SERVICENOW_PASSWORD", "admin")
+SNOW_API_KEY = os.getenv("SERVICENOW_API_KEY", "").strip()
 SNOW_CALLER_NAME = os.getenv("SERVICENOW_CALLER_NAME", "NOC Agent")
 
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")

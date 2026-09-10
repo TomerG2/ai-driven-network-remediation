@@ -17,9 +17,8 @@ from typing import Any, Dict
 
 import requests
 
+from .creds import CREDS_FILE, merge_creds_file
 from .servicenow_client import ServiceNowClient
-
-CREDS_FILE = ".servicenow-creds.json"
 
 
 class ServiceNowUserAutomation(ServiceNowClient):
@@ -83,7 +82,8 @@ class ServiceNowUserAutomation(ServiceNowClient):
                 "sys_id": sys_id,
                 "instance_url": self.instance_url,
             }
-            self._write_creds_file(creds)
+            merge_creds_file(creds)
+            print(f"Credentials written to {CREDS_FILE} (mode 0600)")
 
             return {
                 "user_id": user_id,
@@ -96,19 +96,6 @@ class ServiceNowUserAutomation(ServiceNowClient):
             if hasattr(e, "response") and e.response is not None:
                 print(f"Response: {e.response.text}")
             raise
-
-    @staticmethod
-    def _write_creds_file(creds: Dict[str, str]) -> None:
-        """Write credentials to a gitignored file with restricted permissions."""
-        fd = os.open(CREDS_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        try:
-            with os.fdopen(fd, "w") as f:
-                json.dump(creds, f, indent=2)
-                f.write("\n")
-        except Exception:
-            os.close(fd)
-            raise
-        print(f"Credentials written to {CREDS_FILE} (mode 0600)")
 
     def assign_roles(self, user_sys_id: str) -> None:
         """Assign configured roles to the user."""

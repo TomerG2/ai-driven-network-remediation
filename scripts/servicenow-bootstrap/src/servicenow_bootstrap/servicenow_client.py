@@ -5,6 +5,7 @@ table-lookup helpers so the individual automation modules stay
 DRY.
 """
 
+import os
 from typing import Optional
 
 import requests
@@ -38,6 +39,9 @@ class ServiceNowClient:
         (``SERVICENOW_USERNAME`` / ``SERVICENOW_PASSWORD``).
         Useful for validating as a freshly created agent user
         rather than admin.
+    api_key:
+        ServiceNow REST API key token. When set, sends ``x-sn-apikey``
+        instead of Basic Auth (preferred for ``noc_agent`` machine users).
     timeout:
         Per-request timeout in seconds.  Applies to both connect
         and read phases.  Defaults to ``DEFAULT_TIMEOUT_SECONDS``.
@@ -47,15 +51,24 @@ class ServiceNowClient:
         self,
         username: Optional[str] = None,
         password: Optional[str] = None,
+        api_key: Optional[str] = None,
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self.instance_url: str = get_env_var("SERVICENOW_INSTANCE_URL").rstrip("/")
-        self.username: str = username or get_env_var("SERVICENOW_USERNAME")
-        self.password: str = password or get_env_var("SERVICENOW_PASSWORD")
+        raw_api_key = api_key or os.getenv("SERVICENOW_API_KEY") or None
+        self.api_key: Optional[str] = raw_api_key.strip() if raw_api_key else None
+        self.username: str = username or os.getenv("SERVICENOW_USERNAME", "")
+        self.password: str = password or os.getenv("SERVICENOW_PASSWORD", "")
 
         self.session = requests.Session()
-        self.session.auth = (self.username, self.password)
         self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
+        if self.api_key:
+            self.session.headers["x-sn-apikey"] = self.api_key
+        else:
+            if not self.username or not self.password:
+                self.username = get_env_var("SERVICENOW_USERNAME")
+                self.password = get_env_var("SERVICENOW_PASSWORD")
+            self.session.auth = (self.username, self.password)
         adapter = _TimeoutAdapter(timeout=timeout)
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)

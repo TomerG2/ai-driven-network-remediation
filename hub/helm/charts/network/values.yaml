@@ -209,6 +209,7 @@ mcpSecrets:
     create: true
     username: ""
     password: ""
+    apiKey: ""
 
 # ══════════════════════════════════════════════════════════════════════
 # MCP Servers (subchart: mcp-servers from ai-architecture-charts)
@@ -337,6 +338,9 @@ mcp-servers:
         SERVICENOW_PASSWORD:
           name: noc-servicenow-secret
           key: SERVICENOW_PASSWORD
+        SERVICENOW_API_KEY:
+          name: noc-servicenow-secret
+          key: SERVICENOW_API_KEY
 
     # Disable default servers from the shared chart
     weather:

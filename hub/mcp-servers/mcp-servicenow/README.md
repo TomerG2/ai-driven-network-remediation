@@ -9,7 +9,7 @@ MCP server wrapping the ServiceNow REST API for incident management in the AI-dr
 | `create_incident` | Open a new ServiceNow incident ticket |
 | `update_incident` | Add work notes or change state on an existing incident |
 | `get_incident` | Get incident details by ticket number |
-| `resolve_incident` | Close an incident with resolution notes |
+| `resolve_incident` | Close an incident with resolution notes (tries PDI-specific `close_code` fallbacks when none is specified) |
 
 ## Environment Variables
 
@@ -22,7 +22,9 @@ MCP server wrapping the ServiceNow REST API for incident management in the AI-dr
 | `MCP_TRANSPORT` | No | `sse` |
 | `MCP_PORT` | No | `8000` |
 
-The mock and real ServiceNow instances use the same API contract (Basic Auth, flat JSON, `sysparm_query` lookups). `SERVICENOW_URL` is the only knob — point it at a real PDI or the local mock.
+The mock and real ServiceNow instances use the same API contract (flat JSON, `sysparm_query` lookups). Set `SERVICENOW_URL` to a real PDI or the local mock.
+
+Authentication: prefer `SERVICENOW_API_KEY` (sends `x-sn-apikey` header for `noc_agent` machine users). When unset, falls back to Basic Auth via `SERVICENOW_USERNAME` / `SERVICENOW_PASSWORD` (mock and admin bootstrap).
 
 ## Running Locally
 

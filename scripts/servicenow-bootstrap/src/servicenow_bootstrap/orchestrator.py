@@ -181,15 +181,18 @@ Examples:
             data_results = data_automation.setup_incident_data()
             results["incident_data"] = data_results
 
-        # Step 4: Validate (as the noc_agent user, not admin)
+        # Step 4: Validate (prefer noc_agent API key, then Basic Auth)
         if not args.skip_validation:
             print_step(4, "Validate Incident CRUD")
-            user_result = results.get("user", {})
-            agent_user = user_result.get("user_id")
-            agent_pass = user_result.get("password")
-            if agent_user and agent_pass and agent_pass != "existing_user":
-                print(f"Validating as '{agent_user}' (newly created agent)...")
-                tester = ServiceNowIncidentTester(username=agent_user, password=agent_pass)
+            from .setup_validations import _resolve_validation_auth
+
+            auth = _resolve_validation_auth()
+            if auth["api_key"]:
+                print("Validating with noc_agent API key...")
+                tester = ServiceNowIncidentTester(api_key=auth["api_key"])
+            elif auth["username"] and auth["password"]:
+                print(f"Validating as '{auth['username']}'...")
+                tester = ServiceNowIncidentTester(username=auth["username"], password=auth["password"])
             else:
                 print("Validating with credentials from environment...")
                 tester = ServiceNowIncidentTester()
@@ -205,13 +208,17 @@ Examples:
             user_id = config["servicenow"]["agent_user"]["user_id"]
             print(f"  User created: {user_id}")
             if results["user"].get("password") not in (None, "existing_user"):
-                from .create_noc_agent_user import CREDS_FILE
+                from .creds import CREDS_FILE
 
                 print(f"  Credentials: see {CREDS_FILE}")
 
         if results.get("api", {}).get("api_key"):
             print(f"  API Key: {config['servicenow']['api_key_name']}")
-            print("  Token: log into ServiceNow -> All -> Search 'REST API Key' " "to retrieve it")
+            token = results["api"].get("api_key", {}).get("token")
+            if token and token != "hidden":
+                print("  Token: saved to .servicenow-creds.json")
+            else:
+                print("  Token: log into ServiceNow -> All -> Search 'REST API Key' " "to retrieve it")
 
         if results.get("incident_data", {}).get("sample_incident"):
             inc = results["incident_data"]["sample_incident"]

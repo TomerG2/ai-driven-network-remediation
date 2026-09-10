@@ -7,7 +7,8 @@
       "identity_type": "machine",
       "roles_to_assign": [
         "rest_service",
-        "itil"
+        "itil",
+        "snc_basic_auth_api_access"
       ]
     },
     "api_key_name": "NOC Agent API Key",

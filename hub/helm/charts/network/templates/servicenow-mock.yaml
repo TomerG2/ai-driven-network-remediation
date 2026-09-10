@@ -33,6 +33,11 @@ spec:
                 secretKeyRef:
                   name: noc-servicenow-secret
                   key: SERVICENOW_PASSWORD
+            - name: SERVICENOW_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: noc-servicenow-secret
+                  key: SERVICENOW_API_KEY
           readinessProbe:
             httpGet:
               path: /healthz

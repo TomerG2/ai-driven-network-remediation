@@ -12,7 +12,10 @@ Uses the same REST contract as a real ServiceNow instance:
     POST   /api/now/table/sys_user             -> create user
 
 Authentication:
-    HTTP Basic Auth (validated against SERVICENOW_USERNAME / SERVICENOW_PASSWORD env vars)
+    HTTP Basic Auth (SERVICENOW_USERNAME / SERVICENOW_PASSWORD) or
+    API key header x-sn-apikey (SERVICENOW_API_KEY env var).
+    When both are present, API key auth takes precedence (matches production
+    MCP client behavior, which sends one method only).
 
 Note: Error responses use FastAPI's default shape ({"detail": "..."}), not
 ServiceNow's ({"error": {"message": "...", "detail": "..."}, "status": "failure"}).
@@ -29,11 +32,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 app = FastAPI(title="ServiceNow Mock", version="2.0.0")
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
 MOCK_USERNAME = os.getenv("SERVICENOW_USERNAME", "admin")
 MOCK_PASSWORD = os.getenv("SERVICENOW_PASSWORD", "admin")
@@ -44,13 +47,18 @@ users: dict[str, dict[str, Any]] = {}
 _incident_counter = 1
 
 
-def _verify_basic_auth(credentials: HTTPBasicCredentials = Depends(security)):
-    if not (
-        secrets.compare_digest(credentials.username, MOCK_USERNAME)
-        and secrets.compare_digest(credentials.password, MOCK_PASSWORD)
+def _verify_auth(
+    credentials: HTTPBasicCredentials | None = Depends(security),
+    x_sn_apikey: str | None = Header(default=None, alias="x-sn-apikey"),
+):
+    mock_api_key = os.getenv("SERVICENOW_API_KEY", "")
+    if mock_api_key and x_sn_apikey and secrets.compare_digest(x_sn_apikey, mock_api_key):
+        return "api-key"
+    if credentials and secrets.compare_digest(credentials.username, MOCK_USERNAME) and secrets.compare_digest(
+        credentials.password, MOCK_PASSWORD
     ):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return credentials.username
+        return credentials.username
+    raise HTTPException(status_code=401, detail="Invalid credentials")
 
 
 def _now() -> str:
@@ -97,7 +105,7 @@ def _apply_query_params(
 
 
 @app.post("/api/now/table/incident", status_code=201)
-async def create_incident(body: dict[str, Any], _: str = Depends(_verify_basic_auth)):
+async def create_incident(body: dict[str, Any], _: str = Depends(_verify_auth)):
     now = _now()
     sys_id = uuid.uuid4().hex
     number = _make_number()
@@ -129,7 +137,7 @@ async def create_incident(body: dict[str, Any], _: str = Depends(_verify_basic_a
 
 
 @app.patch("/api/now/table/incident/{sys_id}")
-async def update_incident(sys_id: str, body: dict[str, Any], _: str = Depends(_verify_basic_auth)):
+async def update_incident(sys_id: str, body: dict[str, Any], _: str = Depends(_verify_auth)):
     if sys_id not in incidents:
         raise HTTPException(status_code=404, detail=f"Record not found: {sys_id}")
 
@@ -144,7 +152,7 @@ async def list_incidents(
     sysparm_query: str = "",
     sysparm_limit: int = 100,
     sysparm_fields: str = "",
-    _: str = Depends(_verify_basic_auth),
+    _: str = Depends(_verify_auth),
 ):
     filters = _parse_sysparm_query(sysparm_query)
     if list(filters.keys()) == ["number"] and filters["number"] in _incidents_by_number:
@@ -163,7 +171,7 @@ async def get_user(
     sysparm_query: str = "",
     sysparm_limit: int = 10,
     sysparm_fields: str = "",
-    _: str = Depends(_verify_basic_auth),
+    _: str = Depends(_verify_auth),
 ):
     return {
         "result": _apply_query_params(
@@ -176,7 +184,7 @@ async def get_user(
 
 
 @app.post("/api/now/table/sys_user", status_code=201)
-async def create_user(body: dict[str, Any], _: str = Depends(_verify_basic_auth)):
+async def create_user(body: dict[str, Any], _: str = Depends(_verify_auth)):
     sys_id = uuid.uuid4().hex
     user = {"sys_id": sys_id, **body}
     users[sys_id] = user

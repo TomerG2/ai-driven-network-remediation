@@ -7,11 +7,14 @@ against the ServiceNow Table API. Used as a post-bootstrap health check
 and in CI pipelines.
 """
 
+import os
 import sys
 from typing import Any, Dict, Optional, Tuple
 
 import requests
 
+from .close_codes import load_close_code_fallbacks
+from .creds import load_creds_file
 from .servicenow_client import ServiceNowClient
 
 
@@ -22,8 +25,9 @@ class ServiceNowIncidentTester(ServiceNowClient):
         self,
         username: Optional[str] = None,
         password: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> None:
-        super().__init__(username=username, password=password)
+        super().__init__(username=username, password=password, api_key=api_key)
         self._created_sys_id: Optional[str] = None
         self._created_number: Optional[str] = None
 
@@ -137,20 +141,24 @@ class ServiceNowIncidentTester(ServiceNowClient):
 
         print("Testing incident RESOLVE...")
 
-        payload = {
-            "state": "6",
-            "close_code": "Solved (Permanently)",
-            "resolution_code": "Solved (Permanently)",
-            "close_notes": "Validation: resolved by servicenow-bootstrap",
-            "caller_id": "admin",
-        }
+        close_codes = load_close_code_fallbacks()
+        last_error = ""
+        for close_code in close_codes:
+            payload = {
+                "state": "6",
+                "close_code": close_code,
+                "resolution_code": close_code,
+                "close_notes": "Validation: resolved by servicenow-bootstrap",
+                "resolved_by": "noc_agent",
+            }
+            success, data, error = self._make_request(
+                "PATCH", f"table/incident/{self._created_sys_id}", payload
+            )
+            if success:
+                return True, f"  RESOLVE passed — incident marked as Resolved (close_code={close_code})"
+            last_error = error
 
-        success, data, error = self._make_request("PATCH", f"table/incident/{self._created_sys_id}", payload)
-
-        if success:
-            return True, "  RESOLVE passed — incident marked as Resolved"
-        else:
-            return False, f"  RESOLVE failed — {error}"
+        return False, f"  RESOLVE failed — {last_error}"
 
     def test_caller_resolution(self) -> Tuple[bool, str]:
         """Test that caller lookup works via sys_user table."""
@@ -191,7 +199,10 @@ class ServiceNowIncidentTester(ServiceNowClient):
         print("ServiceNow Incident API Validation")
         print("=" * 60)
         print(f"Instance : {self.instance_url}")
-        print(f"Username : {self.username}")
+        if self.api_key:
+            print("Auth     : API key (x-sn-apikey)")
+        else:
+            print(f"Username : {self.username}")
         print("=" * 60)
         print()
 
@@ -228,11 +239,17 @@ class ServiceNowIncidentTester(ServiceNowClient):
         if passed == total:
             print("\nAll tests passed! Your ServiceNow instance is ready for " "incident management.")
             print("\nYou can now deploy with your ServiceNow instance:")
-            print(
-                f"  SERVICENOW_URL={self.instance_url}\n"
-                f"  SERVICENOW_USERNAME={self.username}\n"
-                f"  SERVICENOW_PASSWORD=<your-password>"
-            )
+            if self.api_key:
+                print(
+                    f"  SERVICENOW_URL={self.instance_url}\n"
+                    "  SERVICENOW_API_KEY=<from .servicenow-creds.json>"
+                )
+            else:
+                print(
+                    f"  SERVICENOW_URL={self.instance_url}\n"
+                    f"  SERVICENOW_USERNAME={self.username}\n"
+                    f"  SERVICENOW_PASSWORD=<your-password>"
+                )
         elif passed > 0:
             print("\nSome tests passed. Check the failed tests above.")
         else:
@@ -243,10 +260,31 @@ class ServiceNowIncidentTester(ServiceNowClient):
         return results
 
 
+def _resolve_validation_auth() -> Dict[str, Optional[str]]:
+    """Prefer API key from creds file or env over Basic Auth."""
+    creds = load_creds_file()
+    raw_api_key = os.getenv("SERVICENOW_API_KEY") or creds.get("api_key")
+    api_key = raw_api_key.strip() if isinstance(raw_api_key, str) else raw_api_key
+    if api_key and api_key != "hidden":
+        return {"api_key": api_key, "username": None, "password": None}
+
+    user_id = os.getenv("SERVICENOW_USERNAME") or creds.get("user_id")
+    password = os.getenv("SERVICENOW_PASSWORD") or creds.get("password")
+    if user_id and password and password != "existing_user":
+        return {"api_key": None, "username": user_id, "password": password}
+
+    return {"api_key": None, "username": None, "password": None}
+
+
 def main() -> None:
     """Main entry point for the validation script."""
     try:
-        tester = ServiceNowIncidentTester()
+        auth = _resolve_validation_auth()
+        tester = ServiceNowIncidentTester(
+            username=auth["username"],
+            password=auth["password"],
+            api_key=auth["api_key"],
+        )
         results = tester.run_all_tests()
 
         failed = [name for name, (ok, _) in results.items() if not ok]

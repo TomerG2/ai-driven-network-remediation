@@ -14,6 +14,7 @@ from typing import Any, Dict
 
 import requests
 
+from .creds import merge_creds_file
 from .servicenow_client import ServiceNowClient
 
 
@@ -22,6 +23,31 @@ class ServiceNowAPIAutomation(ServiceNowClient):
         super().__init__()
         self.agent_user_id = config["servicenow"]["agent_user"]["user_id"]
         self.api_key_name = config["servicenow"]["api_key_name"]
+
+    def _fetch_api_key_token(self, api_key_sys_id: str) -> str:
+        """Retrieve the API key token via admin Table API."""
+        url = f"{self.instance_url}/api/now/table/api_key/{api_key_sys_id}"
+        response = self.session.get(url, params={"sysparm_fields": "token"})
+        response.raise_for_status()
+        return str(response.json().get("result", {}).get("token", ""))
+
+    def _persist_api_key_token(self, api_key_sys_id: str, token: str) -> str:
+        """Save token to creds file; fetch from ServiceNow when hidden."""
+        resolved = token
+        if not resolved or resolved == "hidden":
+            resolved = self._fetch_api_key_token(api_key_sys_id)
+        if resolved and resolved != "hidden":
+            merge_creds_file({"api_key": resolved.strip()})
+            print("API key token saved to .servicenow-creds.json")
+            return resolved
+
+        print(
+            "WARNING: Could not retrieve API key token automatically.\n"
+            "  Go to ServiceNow -> REST API Keys -> copy the token into "
+            ".servicenow-creds.json\n"
+            "  or set SERVICENOW_API_KEY in your environment before running validation."
+        )
+        return resolved or "hidden"
 
     def create_api_key(self) -> Dict[str, str]:
         """Create API key for the NOC agent user."""
@@ -38,9 +64,13 @@ class ServiceNowAPIAutomation(ServiceNowClient):
             if data.get("result"):
                 print(f"API key '{self.api_key_name}' already exists")
                 api_key_record = data["result"][0]
+                token = self._persist_api_key_token(
+                    api_key_record["sys_id"],
+                    api_key_record.get("token", "hidden"),
+                )
                 return {
                     "api_key_sys_id": api_key_record["sys_id"],
-                    "token": api_key_record.get("token", "hidden"),
+                    "token": token or "hidden",
                 }
 
             user_sys_id = self.get_user_sys_id(self.agent_user_id)
@@ -63,11 +93,16 @@ class ServiceNowAPIAutomation(ServiceNowClient):
                 "API Key Token: log into your ServiceNow instance -> All -> "
                 "Search for 'REST API Key' to retrieve the token"
             )
-            print("Please save this token securely!")
+            token = self._persist_api_key_token(
+                api_key_info["sys_id"],
+                api_key_info.get("token", "hidden"),
+            )
+            if token and token != "hidden":
+                print("Please save this token securely!")
 
             return {
                 "api_key_sys_id": api_key_info["sys_id"],
-                "token": api_key_info.get("token", "hidden"),
+                "token": token or "hidden",
             }
 
         except requests.RequestException as e:
