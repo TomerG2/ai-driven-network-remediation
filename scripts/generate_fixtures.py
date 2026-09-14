@@ -92,7 +92,10 @@ def main():
 
         if atype in WANTED_SCENARIOS and atype not in found:
             found[atype] = sample
-            if len(found) == len(WANTED_SCENARIOS):
+            # The dataset begins with all requested anomaly classes before it
+            # reaches a normal sample. Do not stop before collecting one for
+            # normal_traffic.json as well.
+            if len(found) == len(WANTED_SCENARIOS) and normal_candidates:
                 break
 
     for atype, scenario_id in WANTED_SCENARIOS.items():

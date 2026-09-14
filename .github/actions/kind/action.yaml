@@ -4,6 +4,11 @@ description: Install Kind and create a local Kubernetes cluster
 runs:
   using: composite
   steps:
+    # This action builds the local images. The RAN chatbot image generates
+    # TelecomTS fixtures during its build, which requires uv.
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v6
+
     - name: Clean up any pre-existing Kind cluster
       run: |
         kind delete cluster 2>/dev/null || true
@@ -105,5 +110,4 @@ runs:
           oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=${label}" -n hub --timeout=120s
         done
       shell: bash
-
 

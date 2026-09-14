@@ -102,7 +102,6 @@ hub/helm/spokes.generated.yaml
 
 # Generated TelecomTS demo fixtures (regenerate with: make generate-fixtures)
 hub/telco-oran/src/telco_oran/fixtures/*.json
-hub/telco-oran/src/telco_oran/fixtures/.generated
 
 dev-private/
 graphify-out
