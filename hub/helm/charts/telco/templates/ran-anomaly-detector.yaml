@@ -1,4 +1,7 @@
 {{- if .Values.ranAnomalyDetector.enabled }}
+{{- if not .Values.ranAnomalyDetector.env.detectInferenceUrl }}
+{{- fail "ranAnomalyDetector is enabled but detectInferenceUrl is empty. Set ranAnomalyDetector.env.detectInferenceUrl to the ML predictor endpoint (e.g. http://ran-ml-service-predictor.model-serving.svc.cluster.local/v1/detect) or disable the detector with ranAnomalyDetector.enabled=false." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
