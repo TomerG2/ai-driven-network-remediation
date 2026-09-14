@@ -88,7 +88,7 @@ class AnomalyDetectionService:
     def _call_detect(self, kpi_window: list[dict]) -> dict | None:
         """POST kpi_window to the detect predictor. Returns None on failure."""
         if not DETECT_INFERENCE_URL:
-            logger.error("DETECT_INFERENCE_URL not configured")
+            logger.debug("DETECT_INFERENCE_URL not configured, skipping ML detection")
             return None
 
         try:

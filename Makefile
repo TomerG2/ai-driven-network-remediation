@@ -211,6 +211,9 @@ helm_adnr_llm_args = \
 	--set-string telco.ranChatbotService.env.modelName='adnr-llm/$(ADNR_LLM_ID)' \
 	--set-string telco.ranRcaService.env.graniteModelName='adnr-llm/$(ADNR_LLM_ID)'
 
+helm_adnr_detect_args = \
+	$(if $(ADNR_DETECT_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_URL)',)
+
 helm_mcp_image_args = \
 	--set network.mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
 	--set network.mcp-servers.mcp-servers.noc-openshift.image.tag=$(VERSION) \
@@ -352,6 +355,7 @@ helm_all_args = \
 	$(helm_mock_args) \
 	$(helm_gitea_args) \
 	$(helm_adnr_llm_args) \
+	$(helm_adnr_detect_args) \
 	$(helm_autorag_args) \
 	$(helm_lightspeed_args) \
 	$(helm_slack_args) \

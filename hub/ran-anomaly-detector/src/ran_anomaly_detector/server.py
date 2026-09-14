@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
 from ran_anomaly_detector.config import (
-    DETECT_CI_MODE,
     DETECT_INFERENCE_URL,
     KAFKA_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
@@ -49,11 +48,12 @@ def _handle_metrics_message(
 
 
 def _check_predictor_ready() -> bool:
-    """Check if the detect predictor is reachable and ready."""
-    if DETECT_CI_MODE:
-        return True
+    """Check if the detect predictor is reachable and ready.
+
+    No URL configured = predictor not required (return True).
+    """
     if not DETECT_INFERENCE_URL:
-        return False
+        return True
     try:
         base_url = DETECT_INFERENCE_URL.rsplit("/", 2)[0]
         resp = httpx.get(f"{base_url}/ready", timeout=3.0)
