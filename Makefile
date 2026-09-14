@@ -369,6 +369,17 @@ render-spokes:
 	SPOKE_NAME_PREFIX='$(SPOKE_NAME_PREFIX)' \
 	python3 scripts/topology/render-spokes.py -o '$(SPOKES_GENERATED)'
 
+FIXTURES_DIR := hub/telco-oran/src/telco_oran/fixtures
+FIXTURES_STAMP := $(FIXTURES_DIR)/.generated
+
+.PHONY: generate-fixtures
+generate-fixtures:
+	uv run --with datasets scripts/generate_fixtures.py
+
+$(FIXTURES_STAMP): scripts/generate_fixtures.py
+	$(MAKE) generate-fixtures
+	@touch $@
+
 .PHONY: validate-topology
 validate-topology:
 	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
@@ -689,7 +700,7 @@ build-ran-rca-image:
 	$(CONTAINER_TOOL) build -t $(RAN_RCA_IMG) --platform=$(ARCH) -f $(RAN_RCA_CONTAINERFILE) $(RAN_RCA_CONTEXT)
 
 .PHONY: build-ran-chatbot-image
-build-ran-chatbot-image:
+build-ran-chatbot-image: $(FIXTURES_STAMP)
 	$(CONTAINER_TOOL) build -t $(RAN_CHATBOT_IMG) --platform=$(ARCH) -f $(RAN_CHATBOT_CONTAINERFILE) $(RAN_CHATBOT_CONTEXT)
 
 .PHONY: build-ran-frontend-image

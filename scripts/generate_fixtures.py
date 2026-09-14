@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Generate TelecomTS fixture samples from HuggingFace for the demo catalog.
 
-Run once locally to produce checked-in JSON fixtures:
-    python scripts/generate_fixtures.py
+Usage:  make generate-fixtures
 
-Requires: pip install datasets
+Fixtures are gitignored and regenerated on demand. The ran-chatbot-service
+container build depends on this target automatically.
 """
 
 from __future__ import annotations
