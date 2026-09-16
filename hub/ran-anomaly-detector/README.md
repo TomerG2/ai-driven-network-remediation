@@ -33,6 +33,7 @@ See `contracts/ran-anomalies.schema.json` for the full JSON Schema.
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `DETECT_INFERENCE_URL` | *(required)* | Full URL to the detect predictor (e.g., `http://hub-ran-ml-service:8080/v1/detect`) |
+| `DETECT_TOKEN` | *(empty)* | Optional Bearer token sent to the detect predictor for inference and readiness checks |
 | `KAFKA_BOOTSTRAP` | `kafka:9092` | Kafka bootstrap servers |
 | `KAFKA_METRICS_TOPIC` | `ran-combined-metrics` | Input topic (JSON TelecomTS samples) |
 | `KAFKA_ANOMALIES_TOPIC` | `ran-anomalies` | Output topic (anomalies only) |

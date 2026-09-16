@@ -18,7 +18,10 @@ pytestmark = pytest.mark.usefixtures("_patch_detect_url")
 
 @pytest.fixture(autouse=True)
 def _patch_detect_url():
-    with patch("ran_anomaly_detector.detection.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect"):
+    with (
+        patch("ran_anomaly_detector.detection.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect"),
+        patch("ran_anomaly_detector.detection.DETECT_TOKEN", ""),
+    ):
         yield
 
 
@@ -32,6 +35,31 @@ def _mock_detect_response(label: str, confidence: float):
 
 
 class TestAnomalyDetectionService:
+    def test_inference_sends_bearer_token_when_configured(self):
+        service = AnomalyDetectionService()
+        msg = synthetic_fixture_message("antenna_failure")
+
+        with (
+            patch("ran_anomaly_detector.detection.DETECT_TOKEN", "detect-token"),
+            patch("ran_anomaly_detector.detection._get_http_client") as mock_client,
+        ):
+            mock_client.return_value.post.return_value = _mock_detect_response("anomalous", 0.94)
+            service.process_message(msg)
+
+        assert mock_client.return_value.post.call_args.kwargs["headers"] == {
+            "Authorization": "Bearer detect-token"
+        }
+
+    def test_inference_omits_authorization_when_token_is_empty(self):
+        service = AnomalyDetectionService()
+        msg = synthetic_fixture_message("antenna_failure")
+
+        with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
+            mock_client.return_value.post.return_value = _mock_detect_response("anomalous", 0.94)
+            service.process_message(msg)
+
+        assert "headers" not in mock_client.return_value.post.call_args.kwargs
+
     def test_anomalous_sample_produces_output(self):
         service = AnomalyDetectionService()
         msg = synthetic_fixture_message("antenna_failure")

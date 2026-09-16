@@ -13,8 +13,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
+from shared.kafka import TopicConsumer
+
 from ran_anomaly_detector.config import (
     DETECT_INFERENCE_URL,
+    DETECT_TOKEN,
     KAFKA_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
     KAFKA_CONSUMER_ENABLED,
@@ -24,7 +27,6 @@ from ran_anomaly_detector.config import (
     RECENT_ANOMALIES_LIMIT,
 )
 from ran_anomaly_detector.detection import AnomalyDetectionService
-from shared.kafka import TopicConsumer
 
 AnomalyBuffer = deque[dict[str, Any]]
 
@@ -56,7 +58,10 @@ def _check_predictor_ready() -> bool:
         return True
     try:
         base_url = DETECT_INFERENCE_URL.rsplit("/", 2)[0]
-        resp = httpx.get(f"{base_url}/ready", timeout=3.0)
+        request_kwargs: dict[str, Any] = {"timeout": 3.0}
+        if DETECT_TOKEN:
+            request_kwargs["headers"] = {"Authorization": f"Bearer {DETECT_TOKEN}"}
+        resp = httpx.get(f"{base_url}/ready", **request_kwargs)
         return resp.status_code == 200
     except Exception:
         return False

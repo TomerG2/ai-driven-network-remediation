@@ -23,6 +23,32 @@ class TestHealthEndpoint:
 
 
 class TestReadyEndpoint:
+    @patch("ran_anomaly_detector.server.httpx.get")
+    @patch("ran_anomaly_detector.server.DETECT_TOKEN", "detect-token")
+    @patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect")
+    def test_predictor_readiness_sends_bearer_token_when_configured(self, mock_get):
+        mock_get.return_value.status_code = 200
+
+        from ran_anomaly_detector.server import _check_predictor_ready
+
+        assert _check_predictor_ready() is True
+        mock_get.assert_called_once_with(
+            "http://predictor:8080/ready",
+            timeout=3.0,
+            headers={"Authorization": "Bearer detect-token"},
+        )
+
+    @patch("ran_anomaly_detector.server.httpx.get")
+    @patch("ran_anomaly_detector.server.DETECT_TOKEN", "")
+    @patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect")
+    def test_predictor_readiness_omits_authorization_when_token_is_empty(self, mock_get):
+        mock_get.return_value.status_code = 200
+
+        from ran_anomaly_detector.server import _check_predictor_ready
+
+        assert _check_predictor_ready() is True
+        mock_get.assert_called_once_with("http://predictor:8080/ready", timeout=3.0)
+
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", False)
     @patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "")
     def test_ready_passes_when_no_predictor_url(self, client):

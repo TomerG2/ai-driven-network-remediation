@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from ran_anomaly_detector.config import DETECT_INFERENCE_URL
+from ran_anomaly_detector.config import DETECT_INFERENCE_URL, DETECT_TOKEN
 
 AnomalyOutput = dict[str, Any]
 
@@ -93,10 +93,10 @@ class AnomalyDetectionService:
 
         try:
             client = _get_http_client()
-            resp = client.post(
-                DETECT_INFERENCE_URL,
-                json={"kpi_window": kpi_window},
-            )
+            request_kwargs: dict[str, Any] = {"json": {"kpi_window": kpi_window}}
+            if DETECT_TOKEN:
+                request_kwargs["headers"] = {"Authorization": f"Bearer {DETECT_TOKEN}"}
+            resp = client.post(DETECT_INFERENCE_URL, **request_kwargs)
             if resp.status_code != 200:
                 logger.warning("Detect predictor returned HTTP {}: {}", resp.status_code, resp.text[:200])
                 return None
