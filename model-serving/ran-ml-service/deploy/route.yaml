@@ -1,0 +1,28 @@
+# External Route for the KServe-generated predictor Service.
+#
+# Authentication is enforced by the Authorino policy configured at the Route
+# edge. Do not add credentials or auth middleware to ran-ml-service itself.
+#
+# Apply after the InferenceService is Ready:
+#   oc apply -f model-serving/ran-ml-service/deploy/route.yaml
+#
+# Retrieve the external detection URL with:
+#   oc get route ran-ml-service -n model-serving -o jsonpath='https://{.spec.host}/v1/detect'
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ran-ml-service
+  namespace: model-serving
+  labels:
+    app.kubernetes.io/name: ran-ml-service
+    app.kubernetes.io/part-of: ai-driven-network-remediation
+spec:
+  to:
+    kind: Service
+    name: ran-ml-service-predictor
+    weight: 100
+  port:
+    targetPort: http2
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
