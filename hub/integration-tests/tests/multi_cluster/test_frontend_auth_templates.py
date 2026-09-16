@@ -30,6 +30,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 HUB_CHART = REPO_ROOT / "hub" / "helm"
+_DETECT_URL_SET = "telco.ranAnomalyDetector.env.detectInferenceUrl=http://predictor:8080/v1/detect"
 
 
 def _helm_available() -> bool:
@@ -57,6 +58,7 @@ def _run_helm_template(show_only: list[str], extra_sets: list[str]) -> subproces
         "--namespace",
         "hub",
         *[f"--show-only={t}" for t in show_only],
+        f"--set={_DETECT_URL_SET}",
         *[f"--set={s}" for s in extra_sets],
     ]
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
