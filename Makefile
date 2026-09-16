@@ -212,7 +212,8 @@ helm_adnr_llm_args = \
 	--set-string telco.ranRcaService.env.graniteModelName='adnr-llm/$(ADNR_LLM_ID)'
 
 helm_adnr_detect_args = \
-	$(if $(ADNR_DETECT_INFERENCE_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_INFERENCE_URL)',)
+	$(if $(ADNR_DETECT_INFERENCE_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_INFERENCE_URL)',) \
+	$(if $(ADNR_DETECT_TOKEN),--set-string telco.ranAnomalyDetector.env.detectToken='$(ADNR_DETECT_TOKEN)',)
 
 helm_mcp_image_args = \
 	--set network.mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
