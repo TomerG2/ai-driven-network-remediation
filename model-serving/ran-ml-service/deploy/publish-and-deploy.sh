@@ -9,14 +9,16 @@
 #   HF_TOKEN          — HuggingFace write token (or run `hf auth login` first)
 #
 # Optional env:
-#   HF_REPO           — HuggingFace repo (default: rh-ai-quickstart/mantis-ad-telecomts)
-#   WEIGHTS_PATH      — path to .pt weights file (default: model-serving/training/models/mantis_pretrained_ad.pt)
-#   REGISTRY          — container registry (default: quay.io/rh-ai-quickstart)
-#   VERSION           — image tag (default: from Makefile)
-#   ISVC_NAMESPACE    — namespace for InferenceService (default: model-serving)
-#   SKIP_BUILD        — set to 1 to skip image build/push
-#   SKIP_HF_UPLOAD    — set to 1 to skip HuggingFace upload
-#   SKIP_DEPLOY       — set to 1 to skip InferenceService deployment
+#   HF_REPO              — HuggingFace repo (default: rh-ai-quickstart/mantis-ad-telecomts)
+#   WEIGHTS_PATH         — path to .pt weights file (default: model-serving/training/models/mantis_pretrained_ad.pt)
+#   REGISTRY             — container registry (default: quay.io/rh-ai-quickstart)
+#   VERSION              — image tag (default: from Makefile)
+#   ISVC_NAMESPACE       — namespace for InferenceService (default: model-serving)
+#   USE_OPENSHIFT_BUILD  — set to 1 to build on OpenShift cluster instead of local podman (recommended on macOS)
+#   BUILDCONFIG_NAME     — OpenShift BuildConfig name (default: ran-ml-overlay)
+#   SKIP_BUILD           — set to 1 to skip image build/push
+#   SKIP_HF_UPLOAD       — set to 1 to skip HuggingFace upload
+#   SKIP_DEPLOY          — set to 1 to skip InferenceService deployment
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -32,6 +34,8 @@ fi
 export REGISTRY VERSION
 IMAGE="${REGISTRY}/noc-ran-ml-service:${VERSION}"
 ISVC_NAMESPACE="${ISVC_NAMESPACE:-model-serving}"
+USE_OPENSHIFT_BUILD="${USE_OPENSHIFT_BUILD:-}"
+BUILDCONFIG_NAME="${BUILDCONFIG_NAME:-ran-ml-overlay}"
 SKIP_BUILD="${SKIP_BUILD:-}"
 SKIP_HF_UPLOAD="${SKIP_HF_UPLOAD:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-}"
@@ -68,9 +72,38 @@ fi
 
 # ── Step 2: Build and push predictor image ─────────────────────────
 if [ -z "$SKIP_BUILD" ]; then
-    info "Step 2: Building and pushing predictor image ($IMAGE)"
-    make build-push-ran-ml-service REGISTRY="$REGISTRY" VERSION="$VERSION"
-    info "Image pushed"
+    if [ -n "$USE_OPENSHIFT_BUILD" ]; then
+        info "Step 2: Building image on OpenShift cluster ($BUILDCONFIG_NAME)"
+
+        oc whoami >/dev/null 2>&1 \
+            || error "Not logged into OpenShift. Run: oc login <cluster-url>"
+
+        # Ensure Dockerfile symlink exists (BuildConfig expects Dockerfile, we use Containerfile)
+        if [ ! -L "model-serving/ran-ml-service/Dockerfile" ]; then
+            info "Creating Dockerfile symlink to Containerfile"
+            ln -sf Containerfile model-serving/ran-ml-service/Dockerfile
+        fi
+
+        info "Starting build from model-serving/ran-ml-service directory"
+        BUILD_NAME=$(oc start-build "$BUILDCONFIG_NAME" \
+            --from-dir=model-serving/ran-ml-service \
+            -n "$ISVC_NAMESPACE" \
+            -o name)
+
+        info "Build started: $BUILD_NAME"
+        info "Following build logs..."
+        oc logs -f "$BUILD_NAME" -n "$ISVC_NAMESPACE" || true
+
+        info "Waiting for build to complete..."
+        oc wait --for=condition=Complete "$BUILD_NAME" \
+            -n "$ISVC_NAMESPACE" --timeout=600s
+
+        info "OpenShift build complete"
+    else
+        info "Step 2: Building and pushing predictor image ($IMAGE)"
+        make build-push-ran-ml-service REGISTRY="$REGISTRY" VERSION="$VERSION"
+        info "Image pushed"
+    fi
 else
     info "Step 2: SKIPPED (SKIP_BUILD set)"
 fi

@@ -21,6 +21,19 @@ SKIP_HF_UPLOAD=1 VERSION=<new-image-tag> \
   ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
 ```
 
+### Building on macOS
+
+On macOS, podman machine volume mounts may be unreliable. Use OpenShift BuildConfig to build on the cluster instead:
+
+```sh
+# Build on OpenShift cluster (recommended for macOS)
+SKIP_HF_UPLOAD=1 USE_OPENSHIFT_BUILD=1 \
+  ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
+```
+
+This uploads the build context to the cluster and uses the `ran-ml-overlay` BuildConfig to build the image.
+The BuildConfig outputs to an ImageStreamTag that the InferenceService references.
+
 The script waits for the InferenceService to become ready and applies the
 external Route after it is ready. The Route's Authorino policy and its bearer
 token remain cluster-managed configuration.
