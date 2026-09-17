@@ -22,7 +22,7 @@ spec:
     name: ran-ml-service-predictor
     weight: 100
   port:
-    targetPort: http2
+    targetPort: http
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
