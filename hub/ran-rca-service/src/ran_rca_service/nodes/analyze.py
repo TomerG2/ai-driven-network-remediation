@@ -6,6 +6,7 @@ import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
+
 from ran_rca_service.config import get_llm
 from ran_rca_service.models import RCAState
 
@@ -18,8 +19,18 @@ Analyze the anomaly context and any vendor documentation, then produce a structu
 
 When recommending fixes, reference specific vendor documentation sections from the provided context where available.
 
+Classify the root cause as exactly one category:
+- antenna_misalignment: antenna tilt, azimuth, or alignment is degrading coverage.
+- interference: noise, SINR degradation, or RF interference is the primary cause.
+- scheduler_degradation: radio scheduling or resource-allocation behavior is degrading service.
+- congestion: excess active-user demand is causing a transient load imbalance.
+- capacity_exhaustion: sustained PRB or resource capacity is exhausted and must be expanded.
+- cell_failure: a cell, radio, or supporting component has failed or is unavailable.
+- unknown: the evidence does not support one of the other categories.
+
 Respond ONLY with valid JSON matching the provided schema:
 {
+  "root_cause_category": "<one of the defined categories>",
   "root_cause": "<concise root cause explanation referencing 5G KPIs>",
   "recommended_fix": "<specific remediation steps referencing vendor doc sections>"
 }"""
@@ -29,10 +40,22 @@ _MAX_CONTEXT_CHARS = 5000
 _RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
+        "root_cause_category": {
+            "type": "string",
+            "enum": [
+                "antenna_misalignment",
+                "interference",
+                "scheduler_degradation",
+                "congestion",
+                "capacity_exhaustion",
+                "cell_failure",
+                "unknown",
+            ],
+        },
         "root_cause": {"type": "string"},
         "recommended_fix": {"type": "string"},
     },
-    "required": ["root_cause", "recommended_fix"],
+    "required": ["root_cause_category", "root_cause", "recommended_fix"],
 }
 
 
@@ -64,11 +87,14 @@ async def analyze_node(state: RCAState) -> dict:
                 "json_schema": {"name": "RCAAnalysis", "schema": _RESPONSE_SCHEMA},
             },
         )
+        if not isinstance(response.content, str):
+            raise TypeError("LLM response content must be a JSON string")
         parsed = json.loads(response.content)
         return {
+            "root_cause_category": parsed.get("root_cause_category", "unknown"),
             "root_cause": parsed.get("root_cause", ""),
             "recommended_fix": parsed.get("recommended_fix", ""),
         }
-    except Exception:
+    except Exception:  # noqa: BLE001 - graceful degradation must handle provider and parsing errors.
         logger.exception("LLM analysis failed — anomaly will flow through unenriched")
-        return {"root_cause": "", "recommended_fix": ""}
+        return {"root_cause_category": "unknown", "root_cause": "", "recommended_fix": ""}
