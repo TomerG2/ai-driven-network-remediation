@@ -79,6 +79,7 @@ AD) with `root_cause` and `recommended_fix`, matching this output contract
   "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
   "ad_label": "anomalous",
   "ad_confidence": 0.9995,
+  "root_cause_category": "antenna_misalignment",
   "root_cause": "Signal degradation consistent with antenna misalignment...",
   "recommended_fix": "Verify antenna tilt per vendor guide Section 4.3.2..."
 }
