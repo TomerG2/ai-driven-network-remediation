@@ -34,6 +34,11 @@ analysis itself. That domain logic lives in [`ran-anomaly-detector`](../ran-anom
 (LLM root cause analysis + RAG recommended fix retrieval). This service only builds a conversational
 prompt from already-enriched anomaly data and formats the LLM's reply.
 
+When the most recent anomaly carries a `root_cause_category`, `/api/chat` replies are
+prefixed with a title-cased tag — `[Antenna Misalignment] …`. `ran-frontend` strips that
+prefix with a regex and renders it as a badge, so the two sides are coupled: changing the
+prefix format here means changing `ChatPanel.jsx` too.
+
 This is an independent workflow/deployment from `hub/chatbot-service` (the network remediation
 NOC chatbot): different domain, different Kafka topics, different persona/prompt, and it can be
 enabled/disabled separately in Helm. The two services do share one thing: a handful of
