@@ -38,6 +38,11 @@ results (`recent_remediations`, filled by `RemediationConsumer` from `ran-remedi
 see below) and formats the LLM's reply, so operators can ask things like "was the fix for
 incident X successful?" without checking `/api/anomalies` separately.
 
+When the most recent anomaly carries a `root_cause_category`, `/api/chat` replies are
+prefixed with a title-cased tag — `[Antenna Misalignment] …`. `ran-frontend` strips that
+prefix with a regex and renders it as a badge, so the two sides are coupled: changing the
+prefix format here means changing `ChatPanel.jsx` too.
+
 This is an independent workflow/deployment from `hub/chatbot-service` (the network remediation
 NOC chatbot): different domain, different Kafka topics, different persona/prompt, and it can be
 enabled/disabled separately in Helm. The two services do share one thing: a handful of
