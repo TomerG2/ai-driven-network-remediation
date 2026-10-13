@@ -4,7 +4,9 @@ Run this test in order: used with threshold 0, low_confidence with threshold 1,
 then disabled with an empty classify URL. Set RCA_EVIDENCE_FILE to the same
 JSON path for all runs. The first run pins the real prediction; subsequent runs
 must match it. Set RCA_GUIDANCE_THRESHOLD and RCA_DEPLOYMENT_NAMESPACE for each
-deployment. The test reads the running RCA container's URL, token, and threshold.
+deployment. Set RCA_EXPECTED_CLASSIFY_URL and RCA_EXPECTED_CLASSIFY_TOKEN to the
+values deployed in the RCA container; leave both empty for disabled mode when
+appropriate. The test reads the running RCA container's environment.
 """
 
 import json
@@ -59,6 +61,8 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
     evidence = json.loads(evidence_path.read_text()) if evidence_path.exists() else {"runs": {}}
     if mode != "used":
         assert "used" in evidence["runs"], "Run the guided scenario first to pin the model prediction"
+    if mode == "disabled":
+        assert "low_confidence" in evidence["runs"], "Run the unsteered scenario before disabled mode"
     fixture = json.loads(FIXTURE.read_text())
     trigger = ran_chatbot_client.post("/api/demo/trigger", json={"scenario": "antenna_failure"})
     assert trigger.status_code == 200
@@ -145,6 +149,7 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         "incident_id": incident_id, "zone": anomaly["zone"], "application": anomaly["application"],
         "threshold": threshold, "classify_url": os.environ.get("RCA_EXPECTED_CLASSIFY_URL", ""),
         "ml_status": anomaly["ml_status"], "ml_steer_used": anomaly["ml_steer_used"],
+        "ml_class": anomaly["ml_class"], "ml_confidence": anomaly["ml_confidence"],
         "root_cause_category": anomaly["root_cause_category"], "root_cause": anomaly["root_cause"],
         "recommended_fix": anomaly["recommended_fix"], "remediation_template": remediation["template_name"],
         "chat_reply": reply,
