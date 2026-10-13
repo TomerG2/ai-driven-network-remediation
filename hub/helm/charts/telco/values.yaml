@@ -58,6 +58,7 @@ ranRcaService:
     recentAnomaliesLimit: "100"
     classifyInferenceUrl: ""
     classifyToken: ""
+    classifyConfidenceThreshold: "0.6"
   service:
     type: ClusterIP
     port: 8003

@@ -131,6 +131,22 @@ def test_topic_is_required():
         AnomaliesConsumer(deque(), bootstrap_servers="kafka:9092", topic="", max_messages=50)
 
 
+def test_legacy_kafka_record_preserves_identity_and_unrecorded_status():
+    from ran_chatbot_service.chat import format_chat_reply
+
+    buffer: deque[EnrichedAnomaly] = deque(maxlen=50)
+    consumer = AnomaliesConsumer(buffer, bootstrap_servers="kafka:9092", topic=_TOPIC, max_messages=50)
+    consumer._running = True
+    consumer._dispatch({(_TOPIC, 0): [_FakeMessage(0, json.dumps(_SAMPLE_ANOMALY_1))]})
+    assert len(buffer) == 1
+    anomaly = buffer[0]
+    assert (anomaly.incident_id, anomaly.zone, anomaly.application) == ("inc-001", "A", "Twitch")
+    assert anomaly.ml_status == "unrecorded"
+    reply = format_chat_reply("Explain inc-001", "Diagnosis", list(buffer))
+    assert "unrecorded in this historical record" in reply
+    assert "zone=A, app=Twitch" in reply
+
+
 def test_is_connected_false_before_start():
     consumer = AnomaliesConsumer(deque(), bootstrap_servers="kafka:9092", topic=_TOPIC, max_messages=50)
     assert consumer.is_connected is False

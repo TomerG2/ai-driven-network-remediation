@@ -17,17 +17,27 @@ logger = logging.getLogger(__name__)
 _MAX_ITEMS_IN_PROMPT = 5
 
 
+def _ml_explanation(anomaly: EnrichedAnomaly) -> str:
+    if anomaly.ml_status == "used" and anomaly.ml_class and anomaly.ml_confidence is not None:
+        return (f"accepted advisory prediction: {anomaly.ml_class} "
+                f"(confidence {anomaly.ml_confidence:.2f}); guidance used: true")
+    if anomaly.ml_status == "low_confidence" and anomaly.ml_class and anomaly.ml_confidence is not None:
+        return (f"low-confidence prediction: {anomaly.ml_class} "
+                f"(confidence {anomaly.ml_confidence:.2f}); guidance used: false")
+    if anomaly.ml_status == "disabled":
+        return "disabled; no classifier request or prediction; guidance used: false"
+    if anomaly.ml_status == "unrecorded":
+        return "unrecorded in this historical record; no prediction recorded"
+    return "unavailable; no valid classifier prediction; guidance used: false"
+
+
 def _format_anomalies(anomalies: list[EnrichedAnomaly]) -> str:
     """Format enriched RAN anomalies for LLM context."""
     if not anomalies:
         return "No recent RAN anomalies detected."
     lines = []
     for a in anomalies[-_MAX_ITEMS_IN_PROMPT:]:
-        ml_advice = (
-            f"Mantis RCA prediction: {a.ml_class} (confidence {a.ml_confidence:.2f}); "
-            f"guidance used: {a.ml_steer_used}.\n    "
-            if a.ml_class and a.ml_confidence is not None else ""
-        )
+        ml_advice = f"Mantis RCA classification: {_ml_explanation(a)}.\n    "
         lines.append(
             f"  - Incident {a.incident_id} (zone={a.zone}, app={a.application}) "
             f"[AD confidence: {a.ad_confidence:.2f}]\n"
@@ -89,7 +99,7 @@ def build_chat_context(
         "Answer the operator's request directly with concise, actionable analysis about the "
         "detected anomalies below.\n"
         "When discussing an anomaly, mention: the incident ID, zone, application context, "
-        "the AD confidence score, any confident Mantis RCA prediction as separate advice, "
+        "the AD confidence score, Mantis RCA classification status as separate advice, "
         "the final LLM diagnosis and operational category, and the recommended fix (including "
         "which vendor documentation section it references).\n"
         "When discussing remediation status, mention whether the fix succeeded, failed, or is "
@@ -158,10 +168,7 @@ def format_chat_reply(
         )
         root_cause = latest.root_cause or "n/a"
         recommended_fix = latest.recommended_fix or "n/a"
-        ml_prediction = (
-            f"- {latest.ml_class} (confidence {latest.ml_confidence:.2f}; guidance used: {latest.ml_steer_used})"
-            if latest.ml_class and latest.ml_confidence is not None else "- n/a"
-        )
+        ml_prediction = f"- {_ml_explanation(latest)}"
 
     if raw_reply:
         model_insight = raw_reply.strip()

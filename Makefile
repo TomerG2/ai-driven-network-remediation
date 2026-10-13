@@ -225,7 +225,8 @@ helm_adnr_detect_args = \
 
 helm_adnr_classify_args = \
 	$(if $(ADNR_CLASSIFY_INFERENCE_URL),--set-string telco.ranRcaService.env.classifyInferenceUrl='$(ADNR_CLASSIFY_INFERENCE_URL)',) \
-	$(if $(ADNR_CLASSIFY_TOKEN),--set-string telco.ranRcaService.env.classifyToken='$(ADNR_CLASSIFY_TOKEN)',)
+	$(if $(ADNR_CLASSIFY_TOKEN),--set-string telco.ranRcaService.env.classifyToken='$(ADNR_CLASSIFY_TOKEN)',) \
+	$(if $(ADNR_CLASSIFY_CONFIDENCE_THRESHOLD),--set-string telco.ranRcaService.env.classifyConfidenceThreshold='$(ADNR_CLASSIFY_CONFIDENCE_THRESHOLD)',)
 
 helm_mcp_image_args = \
 	--set network.mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \

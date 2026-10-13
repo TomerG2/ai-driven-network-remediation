@@ -47,6 +47,8 @@ spec:
               value: {{ .Values.ranRcaService.env.classifyInferenceUrl | quote }}
             - name: CLASSIFY_TOKEN
               value: {{ .Values.ranRcaService.env.classifyToken | quote }}
+            - name: CLASSIFY_CONFIDENCE_THRESHOLD
+              value: {{ .Values.ranRcaService.env.classifyConfidenceThreshold | quote }}
           ports:
             - name: http
               containerPort: 8003

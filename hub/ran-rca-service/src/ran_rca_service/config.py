@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 
 from langchain_openai import ChatOpenAI
@@ -38,6 +39,21 @@ def get_llm() -> ChatOpenAI:
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 CLASSIFY_INFERENCE_URL = os.getenv("CLASSIFY_INFERENCE_URL", "")
 CLASSIFY_TOKEN = os.getenv("CLASSIFY_TOKEN", "")
+
+
+def parse_classify_confidence_threshold(raw: str) -> float:
+    try:
+        threshold = float(raw)
+    except ValueError as exc:
+        raise ValueError("CLASSIFY_CONFIDENCE_THRESHOLD must be a finite number in [0, 1]") from exc
+    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError("CLASSIFY_CONFIDENCE_THRESHOLD must be a finite number in [0, 1]")
+    return threshold
+
+
+CLASSIFY_CONFIDENCE_THRESHOLD = parse_classify_confidence_threshold(
+    os.getenv("CLASSIFY_CONFIDENCE_THRESHOLD", "0.6")
+)
 KAFKA_ANOMALIES_TOPIC = os.getenv("KAFKA_ANOMALIES_TOPIC", "ran-anomalies")
 KAFKA_ENRICHED_TOPIC = os.getenv("KAFKA_ENRICHED_TOPIC", "ran-anomalies-enriched")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "ran-rca-service")

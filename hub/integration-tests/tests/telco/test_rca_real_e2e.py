@@ -1,8 +1,10 @@
 """Opt-in live fixture → AD → Kafka → RCA → RAG/Granite → API/chat probe.
 
-Set RCA_REAL_E2E=1, RAN_RCA_SERVICE_URL, and RAN_REMEDIATION_SERVICE_URL
-after the independent RCA predictor and hub URL are deployed. The regular
-telco jobs also run in LLM-only mode.
+Run this test once per deployed configuration with RCA_EXPECTED_MODE set to
+used, low_confidence, or disabled. Set RCA_GUIDANCE_THRESHOLD to the deployed
+threshold for classifier-enabled runs. RCA_PINNED_CONFIDENCE can be set to the
+actual confidence observed in the first run to prove the same prediction is
+used for the second run. No model result is fabricated here.
 """
 
 import json
@@ -30,9 +32,11 @@ TEMPLATES = {
 
 
 @pytest.mark.skipif(os.getenv("RCA_REAL_E2E") != "1", reason="Requires the deployed RCA predictor")
-def test_pinned_fixture_reaches_chat_with_ml_guidance(ran_chatbot_client):
+def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_client):
     rca_url = os.environ["RAN_RCA_SERVICE_URL"]
     remediation_url = os.environ["RAN_REMEDIATION_SERVICE_URL"]
+    mode = os.environ.get("RCA_EXPECTED_MODE", "used")
+    assert mode in {"used", "low_confidence", "disabled"}
     fixture = json.loads(FIXTURE.read_text())
     trigger = ran_chatbot_client.post("/api/demo/trigger", json={"scenario": "antenna_failure"})
     assert trigger.status_code == 200
@@ -52,10 +56,21 @@ def test_pinned_fixture_reaches_chat_with_ml_guidance(ran_chatbot_client):
     assert anomaly["application"] == fixture["application"]
     assert anomaly["kpi_window"] == fixture["kpi_window"]
     assert anomaly["ad_label"] == "anomalous"
-    assert anomaly["ml_status"] == "used"
-    assert anomaly["ml_steer_used"] is True
-    assert anomaly["ml_class_index"] in range(10)
-    assert anomaly["ml_confidence"] >= 0.6
+    assert anomaly["ml_status"] == mode
+    assert anomaly["ml_steer_used"] is (mode == "used")
+    if mode == "disabled":
+        assert anomaly["ml_class"] == ""
+        assert anomaly["ml_class_index"] is None
+        assert anomaly["ml_confidence"] == 0
+    else:
+        assert anomaly["ml_class_index"] in range(10)
+        confidence = anomaly["ml_confidence"]
+        assert 0 < confidence < 1
+        threshold = float(os.environ.get("RCA_GUIDANCE_THRESHOLD", "0.6"))
+        assert (confidence >= threshold) is (mode == "used")
+        pinned = os.environ.get("RCA_PINNED_CONFIDENCE")
+        if pinned is not None:
+            assert confidence == pytest.approx(float(pinned), abs=1e-6)
     assert anomaly["root_cause_category"] in {
         "antenna_misalignment", "interference", "scheduler_degradation", "congestion",
         "capacity_exhaustion", "cell_failure", "unknown",
@@ -92,3 +107,9 @@ def test_pinned_fixture_reaches_chat_with_ml_guidance(ran_chatbot_client):
     assert incident_id in reply
     assert "Mantis RCA Prediction" in reply
     assert "Final LLM Operational Category" in reply
+    assert anomaly["root_cause_category"] in reply
+    assert {
+        "used": "accepted advisory prediction",
+        "low_confidence": "low-confidence prediction",
+        "disabled": "disabled; no classifier request or prediction",
+    }[mode] in reply

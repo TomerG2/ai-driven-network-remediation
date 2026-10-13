@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from helpers import make_state
+from ran_rca_service.config import parse_classify_confidence_threshold
 from ran_rca_service.nodes.classify import RCA_CLASSES, classify_node
 
 
@@ -17,6 +18,7 @@ async def test_confident_prediction_uses_only_window_and_optional_token():
     with (
         patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", "https://example/v1/classify"),
         patch("ran_rca_service.config.CLASSIFY_TOKEN", "secret"),
+        patch("ran_rca_service.config.CLASSIFY_CONFIDENCE_THRESHOLD", 0.6),
         patch("ran_rca_service.nodes.classify.httpx.AsyncClient", return_value=client),
     ):
         state = make_state()
@@ -54,6 +56,43 @@ async def test_untrusted_or_low_confidence_prediction_does_not_steer(prediction)
 
 @pytest.mark.asyncio
 async def test_disabled_classifier_preserves_llm_only_mode():
-    with patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", ""):
+    with (
+        patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", ""),
+        patch("ran_rca_service.nodes.classify.httpx.AsyncClient") as client,
+    ):
         result = await classify_node(make_state(ml_class="stale", ml_steer_used=True))
-    assert result == {"ml_class": "", "ml_class_index": None, "ml_confidence": None, "ml_status": "disabled", "ml_steer_used": False}
+    assert result == {
+        "ml_class": "", "ml_class_index": None, "ml_confidence": 0.0,
+        "ml_status": "disabled", "ml_steer_used": False,
+    }
+    client.assert_not_called()
+
+
+@pytest.mark.parametrize("raw", ["", "nan", "inf", "-inf", "-0.01", "1.01", "bad"])
+def test_invalid_guidance_threshold_fails_fast(raw):
+    with pytest.raises(ValueError, match="CLASSIFY_CONFIDENCE_THRESHOLD"):
+        parse_classify_confidence_threshold(raw)
+
+
+@pytest.mark.parametrize("raw, expected", [("0", 0.0), ("0.6", 0.6), ("1", 1.0)])
+def test_valid_guidance_threshold(raw, expected):
+    assert parse_classify_confidence_threshold(raw) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("threshold, expected_status", [(0.5, "used"), (0.8, "low_confidence"), (0.73, "used")])
+async def test_same_prediction_changes_mode_only_with_threshold(threshold, expected_status):
+    response = MagicMock()
+    response.json.return_value = {"class": RCA_CLASSES[0], "class_index": 0, "confidence": 0.73}
+    client = AsyncMock()
+    client.post.return_value = response
+    client.__aenter__.return_value = client
+    with (
+        patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", "https://example/v1/classify"),
+        patch("ran_rca_service.config.CLASSIFY_CONFIDENCE_THRESHOLD", threshold),
+        patch("ran_rca_service.nodes.classify.httpx.AsyncClient", return_value=client),
+    ):
+        result = await classify_node(make_state())
+    assert result["ml_status"] == expected_status
+    assert result["ml_class"] == RCA_CLASSES[0]
+    assert result["ml_confidence"] == 0.73

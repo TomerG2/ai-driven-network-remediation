@@ -18,14 +18,11 @@ RCA_CLASSES = (
     "High Network Congestion (Gradual Buildup)", "High Network Congestion (Sudden Spike)",
 )
 
-MIN_GUIDANCE_CONFIDENCE = 0.6
-
-
 def _no_prediction(status: str) -> dict:
     return {
         "ml_class": "",
         "ml_class_index": None,
-        "ml_confidence": None,
+        "ml_confidence": 0.0,
         "ml_status": status,
         "ml_steer_used": False,
     }
@@ -57,7 +54,7 @@ async def classify_node(state: RCAState) -> dict:
             raise ValueError("invalid RCA confidence")
         if not math.isfinite(confidence) or not 0 <= confidence <= 1:
             raise ValueError("invalid RCA model response")
-        used = confidence >= MIN_GUIDANCE_CONFIDENCE
+        used = confidence >= config.CLASSIFY_CONFIDENCE_THRESHOLD
         return {
             "ml_class": label,
             "ml_class_index": index,

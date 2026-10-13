@@ -27,10 +27,10 @@ class TestBuildChatContext:
             "ml_steer_used": True,
         })
         prompt = build_chat_context("Explain", [anomaly], [], [])
-        assert "Mantis RCA prediction: Co-Channel Interference (Severe)" in prompt
+        assert "accepted advisory prediction: Co-Channel Interference (Severe)" in prompt
         assert "Final LLM category: antenna_misalignment" in prompt
         reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
-        assert "Mantis RCA Prediction:\n- Co-Channel Interference (Severe)" in reply
+        assert "Mantis RCA Prediction:\n- accepted advisory prediction: Co-Channel Interference (Severe)" in reply
         assert "Final LLM Operational Category:\n- antenna_misalignment" in reply
 
     def test_includes_anomaly_details(self, sample_anomalies):
@@ -170,6 +170,7 @@ class TestFormatChatReply:
             "incident_id": "older-123",
             "ml_class": "Antenna Failure",
             "ml_confidence": 0.93,
+            "ml_status": "used",
             "ml_steer_used": True,
         })
         newer = sample_anomaly.model_copy(update={
@@ -179,8 +180,35 @@ class TestFormatChatReply:
         })
         reply = format_chat_reply("Explain older-123", "analysis", [older, newer])
         assert "Incident older-123" in reply
-        assert "Mantis RCA Prediction:\n- Antenna Failure" in reply
+        assert "Mantis RCA Prediction:\n- accepted advisory prediction: Antenna Failure" in reply
         assert "Resource Allocation Bugs" not in reply
+
+    @pytest.mark.parametrize("status, expected", [
+        ("low_confidence", "low-confidence prediction: Antenna Failure"),
+        ("disabled", "disabled; no classifier request or prediction"),
+        ("unrecorded", "unrecorded in this historical record"),
+    ])
+    def test_classification_status_is_distinct_from_diagnosis(self, sample_anomaly, status, expected):
+        updates = {"ml_status": status, "ml_steer_used": False}
+        if status == "low_confidence":
+            updates.update(ml_class="Antenna Failure", ml_confidence=0.5)
+        anomaly = sample_anomaly.model_copy(update=updates)
+        prompt = build_chat_context("Explain", [anomaly], [], [])
+        reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
+        assert expected in prompt
+        assert expected in reply
+        assert "Final LLM category: antenna_misalignment" in prompt
+        assert "Final LLM Operational Category:\n- antenna_misalignment" in reply
+        assert "zone=A, app=Twitch" in reply
+
+    def test_legacy_record_without_ml_fields_is_unrecorded(self, sample_anomaly_dict):
+        from ran_chatbot_service.models import EnrichedAnomaly
+
+        anomaly = EnrichedAnomaly.model_validate(sample_anomaly_dict)
+        assert anomaly.ml_status == "unrecorded"
+        reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
+        assert "unrecorded in this historical record" in reply
+        assert "incident" in reply.lower()
 
     def test_with_anomalies_and_live_reply(self, sample_anomalies):
         reply = format_chat_reply("What's wrong?", "Signal degradation in zone A.", sample_anomalies)

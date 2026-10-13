@@ -26,7 +26,7 @@ class EnrichedAnomaly(BaseModel):
     ml_class: str = ""
     ml_class_index: int | None = None
     ml_confidence: float | None = None
-    ml_status: str = "disabled"
+    ml_status: str = "unrecorded"
     ml_steer_used: bool = False
 
 

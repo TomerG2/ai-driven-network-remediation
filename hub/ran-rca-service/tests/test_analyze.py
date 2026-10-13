@@ -20,6 +20,23 @@ def mock_llm():
 
 class TestSuccessfulLlmCall:
     @pytest.mark.asyncio
+    async def test_low_confidence_excludes_ml_advice_but_keeps_incident_evidence(self, mock_llm):
+        from ran_rca_service.nodes.analyze import analyze_node
+
+        result = await analyze_node(make_state(
+            ml_class="Antenna Failure", ml_class_index=0,
+            ml_confidence=0.4, ml_status="low_confidence", ml_steer_used=False,
+            context_snippets=["vendor RF guide section 4"],
+        ))
+        prompt = mock_llm.ainvoke.call_args[0][0][1].content
+        assert "Antenna Failure" not in prompt
+        assert "Mantis RCA suggestion" not in prompt
+        assert "Top 8 most variable KPIs" in prompt
+        assert "Critical absolute indicators" in prompt
+        assert "vendor RF guide section 4" in prompt
+        assert result["root_cause_category"] == "antenna_misalignment"
+
+    @pytest.mark.asyncio
     async def test_confident_ml_hint_preserves_kpis_and_vendor_evidence(self, mock_llm):
         from ran_rca_service.nodes.analyze import analyze_node
 

@@ -65,6 +65,16 @@ def test_anomalies_includes_new_schema_fields(client, sample_anomaly):
     assert "band" not in anomaly
 
 
+def test_legacy_anomaly_api_reports_unrecorded_status(client, sample_anomaly):
+    client.app.state.recent_anomalies.append(sample_anomaly)
+    anomaly = client.get("/api/anomalies").json()["anomalies"][0]
+    assert anomaly["ml_status"] == "unrecorded"
+    assert anomaly["ml_class"] == ""
+    assert anomaly["incident_id"] == "test-001"
+    assert anomaly["zone"] == "A"
+    assert anomaly["application"] == "Twitch"
+
+
 def test_anomalies_includes_remediation_status_fields(client, sample_anomaly):
     client.app.state.recent_anomalies.append(sample_anomaly)
 

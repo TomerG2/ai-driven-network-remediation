@@ -15,6 +15,19 @@ def _patch_rag_client(mock):
 
 class TestQueryConstruction:
     @pytest.mark.asyncio
+    async def test_low_confidence_keeps_kpi_evidence_but_excludes_prediction(self):
+        mock = MagicMock()
+        mock.search = AsyncMock(return_value=[])
+        with _patch_rag_client(mock):
+            result = await rag_retrieval_node(make_state(
+                ml_class="Antenna Failure", ml_class_index=0,
+                ml_confidence=0.4, ml_status="low_confidence", ml_steer_used=False,
+            ))
+        assert "Antenna Failure" not in result["rag_query_used"]
+        assert "RSRP" in result["rag_query_used"]
+        assert "zone=A" in result["rag_query_used"]
+
+    @pytest.mark.asyncio
     async def test_confident_ml_hint_steers_search(self):
         mock = MagicMock()
         mock.search = AsyncMock(return_value=[])

@@ -53,6 +53,31 @@ class TestReadyEndpoint:
 
 
 class TestAnomaliesEndpoint:
+    def test_low_confidence_survives_kafka_publication_and_api(self, client):
+        from pathlib import Path
+        import jsonschema
+
+        result = {
+            **SAMPLE_ANOMALY,
+            "root_cause_category": "unknown", "root_cause": "cause", "recommended_fix": "fix",
+            "ml_class": "Antenna Failure", "ml_class_index": 0,
+            "ml_confidence": 0.4, "ml_status": "low_confidence", "ml_steer_used": False,
+        }
+        graph = MagicMock()
+        graph.ainvoke = AsyncMock(return_value=result)
+        producer = MagicMock()
+        _handle_anomaly_message(json.dumps(SAMPLE_ANOMALY).encode(), graph, producer,
+                                "ran-anomalies-enriched", client.app.state.recent_enriched)
+        published = json.loads(producer.send.call_args.args[1])
+        schema_path = Path(__file__).resolve().parents[3] / "contracts/ran-anomaly-enriched.schema.json"
+        jsonschema.Draft202012Validator(json.loads(schema_path.read_text())).validate(published)
+        api_record = client.get("/anomalies").json()["anomalies"][0]
+        assert api_record == published
+        assert api_record["ml_class"] == "Antenna Failure"
+        assert api_record["ml_confidence"] == 0.4
+        assert api_record["ml_status"] == "low_confidence"
+        assert api_record["ml_steer_used"] is False
+
     def test_anomalies_empty_by_default(self, client):
         response = client.get("/anomalies")
         assert response.status_code == 200
