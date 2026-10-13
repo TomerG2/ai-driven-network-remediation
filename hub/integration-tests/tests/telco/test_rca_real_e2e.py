@@ -1,14 +1,15 @@
 """Opt-in live fixture → AD → Kafka → RCA → RAG/Granite → API/chat probe.
 
-Run this test once per deployed configuration with RCA_EXPECTED_MODE set to
-used, low_confidence, or disabled. Set RCA_GUIDANCE_THRESHOLD to the deployed
-threshold for classifier-enabled runs. RCA_PINNED_CONFIDENCE can be set to the
-actual confidence observed in the first run to prove the same prediction is
-used for the second run. No model result is fabricated here.
+Run this test in order: used with threshold 0, low_confidence with threshold 1,
+then disabled with an empty classify URL. Set RCA_EVIDENCE_FILE to the same
+JSON path for all runs. The first run pins the real prediction; subsequent runs
+must match it. Set RCA_GUIDANCE_THRESHOLD and RCA_DEPLOYMENT_NAMESPACE for each
+deployment. The test reads the running RCA container's URL, token, and threshold.
 """
 
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -31,12 +32,33 @@ TEMPLATES = {
 }
 
 
+def _assert_running_rca_config(mode: str, threshold: str) -> None:
+    namespace = os.environ["RCA_DEPLOYMENT_NAMESPACE"]
+    deployment = os.environ.get("RCA_DEPLOYMENT_NAME", "hub-ran-rca-service")
+    result = subprocess.run(
+        ["oc", "-n", namespace, "exec", f"deployment/{deployment}", "-c", "ran-rca-service",
+         "--", "printenv", "CLASSIFY_INFERENCE_URL", "CLASSIFY_TOKEN", "CLASSIFY_CONFIDENCE_THRESHOLD"],
+        capture_output=True, text=True, check=True,
+    )
+    actual_url, actual_token, actual_threshold = result.stdout.splitlines()
+    expected_url = os.environ.get("RCA_EXPECTED_CLASSIFY_URL", "")
+    assert (actual_url == expected_url) and (bool(actual_url) is (mode != "disabled"))
+    assert actual_token == os.environ.get("RCA_EXPECTED_CLASSIFY_TOKEN", "")
+    assert actual_threshold == threshold
+
+
 @pytest.mark.skipif(os.getenv("RCA_REAL_E2E") != "1", reason="Requires the deployed RCA predictor")
 def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_client):
     rca_url = os.environ["RAN_RCA_SERVICE_URL"]
     remediation_url = os.environ["RAN_REMEDIATION_SERVICE_URL"]
     mode = os.environ.get("RCA_EXPECTED_MODE", "used")
     assert mode in {"used", "low_confidence", "disabled"}
+    threshold = os.environ["RCA_GUIDANCE_THRESHOLD"]
+    _assert_running_rca_config(mode, threshold)
+    evidence_path = Path(os.environ["RCA_EVIDENCE_FILE"])
+    evidence = json.loads(evidence_path.read_text()) if evidence_path.exists() else {"runs": {}}
+    if mode != "used":
+        assert "used" in evidence["runs"], "Run the guided scenario first to pin the model prediction"
     fixture = json.loads(FIXTURE.read_text())
     trigger = ran_chatbot_client.post("/api/demo/trigger", json={"scenario": "antenna_failure"})
     assert trigger.status_code == 200
@@ -66,11 +88,12 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         assert anomaly["ml_class_index"] in range(10)
         confidence = anomaly["ml_confidence"]
         assert 0 < confidence < 1
-        threshold = float(os.environ.get("RCA_GUIDANCE_THRESHOLD", "0.6"))
-        assert (confidence >= threshold) is (mode == "used")
-        pinned = os.environ.get("RCA_PINNED_CONFIDENCE")
-        if pinned is not None:
-            assert confidence == pytest.approx(float(pinned), abs=1e-6)
+        assert (confidence >= float(threshold)) is (mode == "used")
+        if mode == "low_confidence":
+            pinned = evidence["prediction"]
+            assert anomaly["ml_class"] == pinned["class"]
+            assert anomaly["ml_class_index"] == pinned["class_index"]
+            assert confidence == pytest.approx(pinned["confidence"], abs=1e-6)
     assert anomaly["root_cause_category"] in {
         "antenna_misalignment", "interference", "scheduler_degradation", "congestion",
         "capacity_exhaustion", "cell_failure", "unknown",
@@ -113,3 +136,17 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         "low_confidence": "low-confidence prediction",
         "disabled": "disabled; no classifier request or prediction",
     }[mode] in reply
+    if mode == "used":
+        evidence["prediction"] = {
+            "class": anomaly["ml_class"], "class_index": anomaly["ml_class_index"],
+            "confidence": anomaly["ml_confidence"],
+        }
+    evidence["runs"][mode] = {
+        "incident_id": incident_id, "zone": anomaly["zone"], "application": anomaly["application"],
+        "threshold": threshold, "classify_url": os.environ.get("RCA_EXPECTED_CLASSIFY_URL", ""),
+        "ml_status": anomaly["ml_status"], "ml_steer_used": anomaly["ml_steer_used"],
+        "root_cause_category": anomaly["root_cause_category"], "root_cause": anomaly["root_cause"],
+        "recommended_fix": anomaly["recommended_fix"], "remediation_template": remediation["template_name"],
+        "chat_reply": reply,
+    }
+    evidence_path.write_text(json.dumps(evidence, indent=2) + "\n")
