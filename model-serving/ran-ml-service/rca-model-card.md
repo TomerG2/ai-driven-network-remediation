@@ -53,7 +53,10 @@ provenance are in [the validation report](../../docs/model-runs/issue-196-rca-va
 Checkpoint SHA-256: `0ecd02d50eed50130476c0c543503f9f3d1595507502664d3e5b8fb01c3eccfe`.
 Preprocessing SHA-256: `1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae`.
 Both files are retained privately at
-`model-serving/ran-ml-service/.private-artifacts/issue-196/` in the local
-workspace; that directory is ignored by Git and excluded from image builds.
+`~/Library/Application Support/ai-driven-network-remediation/issue-196/`,
+independent of the training directory and repository workspace. A workspace
+copy at `model-serving/ran-ml-service/.private-artifacts/issue-196/` is ignored
+by Git and excluded from image builds. Both copies have matching hashes; the
+persistent copy was reloaded through the classifier.
 No publication or deployment has occurred. Synthetic TelecomTS results alone
 do not establish production generalization.
