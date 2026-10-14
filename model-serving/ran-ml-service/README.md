@@ -57,7 +57,7 @@ Set that value as `ADNR_DETECT_INFERENCE_URL`. `ADNR_DETECT_TOKEN` is optional; 
 | `MANTIS_CHECKPOINT` | HuggingFace backbone ID (default: `paris-noah/Mantis-8M`, baked into image) |
 | `PORT` | HTTP port (default: 8080) |
 
-For local RCA inference, place the original `mantis_pretrained_rca.pt` and
+For local RCA inference, place `mantis_pretrained_rca.pt` and
 `artifacts/rca_preprocessing.json` in one directory, then run:
 
 ```sh
@@ -70,3 +70,32 @@ mode. `POST /v1/classify` accepts `{"kpi_window": [...]}` with all 128 rows and
 returns `class`, `class_index`, and `confidence`. `/ready` stays unavailable if
 the checkpoint task, head dimensions, or preprocessing artifact (including its
 ordered RCA class mapping) is invalid.
+
+## RCA checkpoint recovery
+
+`scripts/train_rca.py` runs only the 10-class pretrained Mantis RCA task from
+the TelecomTS notebook. It fixes the dataset revision, backbone revision,
+80/20 seed-42 split, class order, 35 epochs, batch size 64, and learning rate
+`1e-4`. It requires a private, durable mounted output directory. No model is
+published or deployed by this command.
+
+The script reads the three Arrow shards of the pinned TelecomTS revision. If
+they are not already cached, fetch them once with `datasets` using the revision
+`1b3a88a440f4922edfcd1e230e42c003c0e13bdf` and
+`data_files={"full": "**/chunked.jsonl"}`, then pass the resulting Arrow
+directory as `--dataset-dir`.
+
+```sh
+cd model-serving/ran-ml-service
+uv sync --locked --group train
+uv run --locked --group train python scripts/train_rca.py \
+  --output-dir /private/durable-storage/rca-run-196
+```
+
+The output directory contains `mantis_pretrained_rca.pt`, the paired
+`rca_preprocessing.json`, and `rca_validation_report.json`. The report records
+both serving-style and notebook-style scores, the 10-class confusion matrix
+and per-class metrics, separate Jamming predictions, artifact SHA-256 hashes,
+dependency versions, and provenance. Only the serving-style score sets the
+pass/fail status. Retain a failed report for diagnosis; a failed gate is not a
+validated checkpoint.

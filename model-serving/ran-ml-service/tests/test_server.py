@@ -152,6 +152,17 @@ class TestClassifyEndpoint:
         assert x.shape == (1, 128, 18)
         assert x[0, 0, 0].item() == pytest.approx(sample_kpi_window[0]["RSRP"] / 2)
 
+    def test_rca_preprocess_accepts_empty_protocol_from_telecomts(self, sample_kpi_window):
+        import torch
+        from ran_ml_service.model import MantisPredictor
+
+        sample_kpi_window[0]["DL_Protocol"] = ""
+        candidate = MantisPredictor()
+        candidate.task = "root-cause analysis"
+        candidate.rca_means = torch.zeros((1, 1, 18))
+        candidate.rca_stds = torch.ones((1, 1, 18))
+        assert candidate.preprocess(sample_kpi_window)[0, 0, 16].item() == 2.0
+
     @pytest.mark.parametrize(
         "change",
         [

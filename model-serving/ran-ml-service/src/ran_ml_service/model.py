@@ -46,7 +46,7 @@ KPI_CHANNELS = [
     "DL_NumberOfPackets",
 ]
 
-PROTOCOL_MAP = {"TCP": 0, "UDP": 1, None: 2, "None": 2}
+PROTOCOL_MAP = {"TCP": 0, "UDP": 1, None: 2, "None": 2, "": 2}
 PROTOCOL_CHANNELS = frozenset({"UL_Protocol", "DL_Protocol"})
 
 AD_LABELS = ["normal", "anomalous"]
