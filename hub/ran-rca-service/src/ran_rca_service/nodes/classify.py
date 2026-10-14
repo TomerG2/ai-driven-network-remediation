@@ -11,12 +11,18 @@ from ran_rca_service.models import RCAState
 
 # Mirrored from telco_oran.rca; the model-serving image must stay independent.
 RCA_CLASSES = (
-    "Antenna Failure", "Co-Channel Interference (Mild)",
-    "Co-Channel Interference (Severe)", "Faulty RF Filters (Temporal)",
-    "Doppler Shift (Severe)", "Faulty Handover Algorithm (Too Frequent)",
-    "Buffer Overflow (Gradual Buildup)", "Resource Allocation Bugs",
-    "High Network Congestion (Gradual Buildup)", "High Network Congestion (Sudden Spike)",
+    "Antenna Failure",
+    "Co-Channel Interference (Mild)",
+    "Co-Channel Interference (Severe)",
+    "Faulty RF Filters (Temporal)",
+    "Doppler Shift (Severe)",
+    "Faulty Handover Algorithm (Too Frequent)",
+    "Buffer Overflow (Gradual Buildup)",
+    "Resource Allocation Bugs",
+    "High Network Congestion (Gradual Buildup)",
+    "High Network Congestion (Sudden Spike)",
 )
+
 
 def _no_prediction(status: str) -> dict:
     return {
@@ -64,4 +70,4 @@ async def classify_node(state: RCAState) -> dict:
         }
     except (httpx.HTTPError, ValueError, TypeError, KeyError):
         logger.exception("RCA model call failed or returned an invalid prediction")
-        return _no_prediction("unavailable")
+        return _no_prediction("failed")

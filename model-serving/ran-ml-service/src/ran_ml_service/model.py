@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -78,10 +78,9 @@ def _encode_channel(channel: str, value: Any, timestep: int) -> float:
     elif value is None:
         raise InvalidKpiWindowError(f"null KPI {channel!r} at timestep {timestep}")
 
-    try:
-        encoded = float(value)
-    except (TypeError, ValueError) as exc:
-        raise InvalidKpiWindowError(f"non-numeric KPI {channel!r} at timestep {timestep}: {value!r}") from exc
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise InvalidKpiWindowError(f"non-numeric KPI {channel!r} at timestep {timestep}: {value!r}")
+    encoded = float(value)
 
     if math.isnan(encoded):
         raise InvalidKpiWindowError(f"NaN KPI {channel!r} at timestep {timestep}")
@@ -118,7 +117,7 @@ class PretrainedMantisEncoder(nn.Module):
         h = h.reshape(B, C, -1)  # [B, C, 256]
         h = h.mean(dim=1)  # [B, 256]
         h = self.dropout(self.act(h))
-        return self.projection(h)  # [B, d_model]
+        return cast(torch.Tensor, self.projection(h))  # [B, d_model]
 
 
 class MantisPredictor:
@@ -164,7 +163,11 @@ class MantisPredictor:
             import json
 
             stats = json.loads(stats_path.read_text())
-            if stats["channels"] != KPI_CHANNELS or stats["protocol_map"] != {"TCP": 0, "UDP": 1, "None": 2}:
+            if (
+                stats["channels"] != KPI_CHANNELS
+                or stats["protocol_map"] != {"TCP": 0, "UDP": 1, "None": 2}
+                or stats["rca_classes"] != list(RCA_CLASSES)
+            ):
                 raise ValueError("RCA preprocessing feature contract mismatch")
             self.rca_means = torch.tensor(stats["train"]["means"], dtype=torch.float32).view(1, 1, -1)
             self.rca_stds = torch.tensor(stats["train"]["stds"], dtype=torch.float32).view(1, 1, -1)
@@ -247,7 +250,7 @@ class MantisPredictor:
             embedding = self.encoder(x)
             logits = self.head(embedding)
             probs = F.softmax(logits, dim=1)
-            pred_idx = probs.argmax(dim=1).item()
+            pred_idx = int(probs.argmax(dim=1).item())
             confidence = probs[0, pred_idx].item()
 
         return {

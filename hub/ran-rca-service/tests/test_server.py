@@ -3,12 +3,31 @@
 from __future__ import annotations
 
 import json
+from collections import deque
+from copy import deepcopy
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
-from helpers import SAMPLE_ANOMALY
+from helpers import SAMPLE_ANOMALY, make_llm_response
 from ran_rca_service.server import _handle_anomaly_message, app
+
+
+def stream_graph(*updates, failure=None):
+    graph = MagicMock()
+    graph.inputs = []
+
+    async def stream(anomaly, *, stream_mode):
+        graph.inputs.append((anomaly, stream_mode))
+        for update in updates:
+            yield update
+        if failure is not None:
+            raise failure
+
+    graph.astream = stream
+    return graph
 
 
 @pytest.fixture
@@ -55,19 +74,29 @@ class TestReadyEndpoint:
 class TestAnomaliesEndpoint:
     def test_low_confidence_survives_kafka_publication_and_api(self, client):
         from pathlib import Path
+
         import jsonschema
 
         result = {
             **SAMPLE_ANOMALY,
-            "root_cause_category": "unknown", "root_cause": "cause", "recommended_fix": "fix",
-            "ml_class": "Antenna Failure", "ml_class_index": 0,
-            "ml_confidence": 0.4, "ml_status": "low_confidence", "ml_steer_used": False,
+            "root_cause_category": "unknown",
+            "root_cause": "cause",
+            "recommended_fix": "fix",
+            "ml_class": "Antenna Failure",
+            "ml_class_index": 0,
+            "ml_confidence": 0.4,
+            "ml_status": "low_confidence",
+            "ml_steer_used": False,
         }
-        graph = MagicMock()
-        graph.ainvoke = AsyncMock(return_value=result)
+        graph = stream_graph({"analyze": result})
         producer = MagicMock()
-        _handle_anomaly_message(json.dumps(SAMPLE_ANOMALY).encode(), graph, producer,
-                                "ran-anomalies-enriched", client.app.state.recent_enriched)
+        _handle_anomaly_message(
+            json.dumps(SAMPLE_ANOMALY).encode(),
+            graph,
+            producer,
+            "ran-anomalies-enriched",
+            client.app.state.recent_enriched,
+        )
         published = json.loads(producer.send.call_args.args[1])
         schema_path = Path(__file__).resolve().parents[3] / "contracts/ran-anomaly-enriched.schema.json"
         jsonschema.Draft202012Validator(json.loads(schema_path.read_text())).validate(published)
@@ -119,18 +148,194 @@ class TestAnomaliesEndpoint:
 
 
 class TestHandleAnomalyMessage:
+    @pytest.mark.parametrize(
+        "channel",
+        json.loads((Path(__file__).resolve().parents[3] / "contracts/ran-anomalies.schema.json").read_text())[
+            "properties"
+        ]["kpi_window"]["items"]["required"],
+    )
+    def test_every_contract_channel_is_required_before_graph(self, channel):
+        invalid = deepcopy(SAMPLE_ANOMALY)
+        del invalid["kpi_window"][0][channel]
+        graph = stream_graph()
+        producer = MagicMock()
+        buffer = deque(maxlen=100)
+        _handle_anomaly_message(json.dumps(invalid).encode(), graph, producer, "topic", buffer)
+        assert graph.inputs == []
+        producer.send.assert_not_called()
+        assert not buffer
+
+    @pytest.mark.parametrize("first_failure", ["connection", "malformed_response"])
+    def test_classifier_outage_then_recovery_on_same_graph(self, first_failure):
+        from ran_rca_service.graph import build_graph
+        from ran_rca_service.nodes.classify import RCA_CLASSES
+
+        response = MagicMock()
+        response.json.return_value = {"class": RCA_CLASSES[0], "class_index": 0, "confidence": 0.91}
+        classifier_client = AsyncMock()
+        malformed = MagicMock()
+        malformed.json.return_value = {"class": RCA_CLASSES[0], "class_index": True, "confidence": 0.9}
+        first_result = httpx.ConnectError("outage") if first_failure == "connection" else malformed
+        classifier_client.post.side_effect = [first_result, response]
+        classifier_client.__aenter__.return_value = classifier_client
+        rag = MagicMock()
+        rag.search = AsyncMock(return_value=[])
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(return_value=make_llm_response())
+        producer = MagicMock()
+        buffer = deque(maxlen=100)
+        with (
+            patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", "https://example/v1/classify"),
+            patch("ran_rca_service.nodes.classify.httpx.AsyncClient", return_value=classifier_client),
+            patch("ran_rca_service.nodes.rag_retrieval._rag_client", rag),
+            patch("ran_rca_service.nodes.analyze.get_llm", return_value=llm),
+        ):
+            graph = build_graph()
+            for incident_id in ("outage", "recovered"):
+                anomaly = {**SAMPLE_ANOMALY, "incident_id": incident_id}
+                _handle_anomaly_message(json.dumps(anomaly).encode(), graph, producer, "topic", buffer)
+
+        assert len(buffer) == 2
+        assert [record["ml_status"] for record in buffer] == ["failed", "used"]
+        assert [record["ml_class"] for record in buffer] == ["", RCA_CLASSES[0]]
+        assert all(record["root_cause_category"] == "antenna_misalignment" for record in buffer)
+        assert all(record["root_cause"] and record["recommended_fix"] for record in buffer)
+        assert producer.send.call_count == 2
+
+    def test_real_graph_stage_error_preserves_completed_classification(self):
+        from langgraph.graph import START, StateGraph
+        from ran_rca_service.models import RCAState
+
+        async def classify(_state):
+            return {
+                "ml_class": "Antenna Failure",
+                "ml_class_index": 0,
+                "ml_confidence": 0.9,
+                "ml_status": "used",
+                "ml_steer_used": True,
+            }
+
+        async def broken_rag(_state):
+            raise RuntimeError("fault-injected graph stage")
+
+        builder = StateGraph(RCAState)
+        builder.add_node("classify", classify)
+        builder.add_node("rag_retrieval", broken_rag)
+        builder.add_edge(START, "classify")
+        builder.add_edge("classify", "rag_retrieval")
+        producer = MagicMock()
+        buffer = deque(maxlen=100)
+        _handle_anomaly_message(json.dumps(SAMPLE_ANOMALY).encode(), builder.compile(), producer, "topic", buffer)
+        published = json.loads(producer.send.call_args.args[1])
+        assert published["ml_status"] == "used"
+        assert published["ml_class"] == "Antenna Failure"
+        assert published["root_cause_category"] == "unknown"
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            lambda a: a.pop("incident_id"),
+            lambda a: a.update(zone=""),
+            lambda a: a.update(ad_label="normal"),
+            lambda a: a.update(ad_confidence=float("nan")),
+            lambda a: a.update(kpi_window=[]),
+            lambda a: a["kpi_window"][0].pop("RSRP"),
+            lambda a: a["kpi_window"][0].update(RSRP=None),
+            lambda a: a["kpi_window"][0].update(RSRP="bad"),
+        ],
+    )
+    def test_invalid_anomaly_is_skipped_before_graph_and_next_real_fixture_reaches_api(self, change):
+        invalid = deepcopy(SAMPLE_ANOMALY)
+        change(invalid)
+        graph = stream_graph({"analyze": {"root_cause_category": "interference"}})
+        producer = MagicMock()
+        buffer = deque(maxlen=100)
+
+        _handle_anomaly_message(json.dumps(invalid).encode(), graph, producer, "topic", buffer)
+        assert graph.inputs == []
+        producer.send.assert_not_called()
+        assert len(buffer) == 0
+
+        _handle_anomaly_message(json.dumps(SAMPLE_ANOMALY).encode(), graph, producer, "topic", buffer)
+        assert len(buffer) == 1
+        assert buffer[0]["incident_id"] == "test-001"
+
+    @pytest.mark.parametrize(
+        "classification, expected_status, expected_class",
+        [
+            (
+                {
+                    "ml_status": "used",
+                    "ml_class": "Antenna Failure",
+                    "ml_class_index": 0,
+                    "ml_confidence": 0.9,
+                    "ml_steer_used": True,
+                },
+                "used",
+                "Antenna Failure",
+            ),
+            (
+                {
+                    "ml_status": "failed",
+                    "ml_class": "",
+                    "ml_class_index": None,
+                    "ml_confidence": 0.0,
+                    "ml_steer_used": False,
+                },
+                "failed",
+                "",
+            ),
+        ],
+    )
+    def test_graph_failure_publishes_truthful_partial_classification(
+        self, classification, expected_status, expected_class
+    ):
+        from pathlib import Path
+
+        import jsonschema
+
+        graph = stream_graph({"classify": classification}, failure=RuntimeError("rag failed"))
+        producer = MagicMock()
+        buffer = deque(maxlen=100)
+        _handle_anomaly_message(json.dumps(SAMPLE_ANOMALY).encode(), graph, producer, "topic", buffer)
+        published = json.loads(producer.send.call_args.args[1])
+        schema_path = Path(__file__).resolve().parents[3] / "contracts/ran-anomaly-enriched.schema.json"
+        schema = json.loads(schema_path.read_text())
+        jsonschema.Draft202012Validator(schema).validate(published)
+        assert published["kpi_window"] == SAMPLE_ANOMALY["kpi_window"]
+        assert published["root_cause_category"] == "unknown"
+        assert published["root_cause"] == published["recommended_fix"] == ""
+        assert published["ml_status"] == expected_status
+        assert published["ml_class"] == expected_class
+
+    @pytest.mark.parametrize(
+        "classify_url, expected_status",
+        [
+            ("", "disabled"),
+            ("https://example/v1/classify", "failed"),
+        ],
+    )
+    def test_graph_failure_before_classification_uses_configured_status(self, classify_url, expected_status):
+        graph = stream_graph(failure=RuntimeError("classify stage failed"))
+        buffer = deque(maxlen=100)
+        with patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", classify_url):
+            _handle_anomaly_message(json.dumps(SAMPLE_ANOMALY).encode(), graph, None, "topic", buffer)
+        assert buffer[0]["ml_status"] == expected_status
+        assert buffer[0]["root_cause_category"] == "unknown"
+
     def test_invokes_graph_and_appends_to_buffer(self):
         from collections import deque
 
-        graph = MagicMock()
-        graph.ainvoke = AsyncMock(
-            return_value={
-                **SAMPLE_ANOMALY,
-                "context_snippets": [],
-                "rag_query_used": "5G anomaly detection",
-                "root_cause_category": "antenna_misalignment",
-                "root_cause": "stub root cause",
-                "recommended_fix": "stub fix",
+        graph = stream_graph(
+            {
+                "analyze": {
+                    **SAMPLE_ANOMALY,
+                    "context_snippets": [],
+                    "rag_query_used": "5G anomaly detection",
+                    "root_cause_category": "antenna_misalignment",
+                    "root_cause": "stub root cause",
+                    "recommended_fix": "stub fix",
+                }
             }
         )
         producer = MagicMock()
@@ -139,7 +344,7 @@ class TestHandleAnomalyMessage:
         raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")
         _handle_anomaly_message(raw, graph, producer, "ran-anomalies-enriched", buffer)
 
-        graph.ainvoke.assert_awaited_once_with(SAMPLE_ANOMALY)
+        assert graph.inputs == [(SAMPLE_ANOMALY, "updates")]
         assert len(buffer) == 1
         assert buffer[0]["root_cause_category"] == "antenna_misalignment"
         assert buffer[0]["root_cause"] == "stub root cause"
@@ -147,20 +352,21 @@ class TestHandleAnomalyMessage:
     def test_publishes_enriched_to_kafka(self):
         from collections import deque
 
-        graph = MagicMock()
-        graph.ainvoke = AsyncMock(
-            return_value={
-                **SAMPLE_ANOMALY,
-                "context_snippets": [],
-                "rag_query_used": "",
-                "root_cause_category": "antenna_misalignment",
-                "root_cause": "cause",
-                "recommended_fix": "fix",
-                "ml_class": "Antenna Failure",
-                "ml_class_index": 0,
-                "ml_confidence": 0.91,
-                "ml_status": "used",
-                "ml_steer_used": True,
+        graph = stream_graph(
+            {
+                "analyze": {
+                    **SAMPLE_ANOMALY,
+                    "context_snippets": [],
+                    "rag_query_used": "",
+                    "root_cause_category": "antenna_misalignment",
+                    "root_cause": "cause",
+                    "recommended_fix": "fix",
+                    "ml_class": "Antenna Failure",
+                    "ml_class_index": 0,
+                    "ml_confidence": 0.91,
+                    "ml_status": "used",
+                    "ml_steer_used": True,
+                }
             }
         )
         producer = MagicMock()
@@ -180,31 +386,38 @@ class TestHandleAnomalyMessage:
         assert enriched["ml_class"] == "Antenna Failure"
         assert enriched["ml_status"] == "used"
         assert enriched["ml_steer_used"] is True
+        from pathlib import Path
+
+        import jsonschema
+
+        schema_path = Path(__file__).resolve().parents[3] / "contracts/ran-anomaly-enriched.schema.json"
+        jsonschema.Draft202012Validator(json.loads(schema_path.read_text())).validate(enriched)
 
     def test_skips_malformed_json(self):
         from collections import deque
 
-        graph = MagicMock()
+        graph = stream_graph()
         producer = MagicMock()
         buffer: deque = deque(maxlen=100)
 
         _handle_anomaly_message(b"not json", graph, producer, "topic", buffer)
 
-        graph.ainvoke.assert_not_called()
+        assert graph.inputs == []
         producer.send.assert_not_called()
         assert len(buffer) == 0
 
     def test_works_without_producer(self):
         from collections import deque
 
-        graph = MagicMock()
-        graph.ainvoke = AsyncMock(
-            return_value={
-                **SAMPLE_ANOMALY,
-                "context_snippets": [],
-                "rag_query_used": "",
-                "root_cause": "cause",
-                "recommended_fix": "fix",
+        graph = stream_graph(
+            {
+                "analyze": {
+                    **SAMPLE_ANOMALY,
+                    "context_snippets": [],
+                    "rag_query_used": "",
+                    "root_cause": "cause",
+                    "recommended_fix": "fix",
+                }
             }
         )
         buffer: deque = deque(maxlen=100)
@@ -217,8 +430,7 @@ class TestHandleAnomalyMessage:
     def test_graph_error_forwards_anomaly_unenriched(self):
         from collections import deque
 
-        graph = MagicMock()
-        graph.ainvoke = AsyncMock(side_effect=RuntimeError("graph failure"))
+        graph = stream_graph(failure=RuntimeError("graph failure"))
         buffer: deque = deque(maxlen=100)
 
         raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")

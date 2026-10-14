@@ -13,7 +13,8 @@ which the serving image bakes in offline, plus the task checkpoint
 `mantis_pretrained_rca.pt`. Training used seed 42 and 35 epochs. No retraining
 is part of serving.
 
-Input channel order is recorded in `rca_preprocessing.json`. Protocols map
+Input channel order and the ordered RCA class mapping are recorded in
+`rca_preprocessing.json`. Protocols map
 TCP→0, UDP→1, and missing/None→2. For RCA, the TelecomTS reference computes
 each channel's mean and population standard deviation across all RCA examples
 and timesteps in a split. The service uses the fixed **training** split values
@@ -35,7 +36,7 @@ The notebook SHA-256 is
 The dataset revision is `1b3a88a440f4922edfcd1e230e42c003c0e13bdf`
 with split seed 42. The backbone revision used by AD parity is
 `bc7d5ab40c02133386a28e2c127f35c17c86901d`. The preprocessing file
-SHA-256 is `628fe3226b6f5f059a0b0aba15cd12368723bee5d52348b7a7950b548457a62a`.
+SHA-256 is `1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae`.
 The RCA checkpoint revision, hash, notebook logits, and MLflow artifact link
 must be recorded after the original export is recovered; the published AD
 checkpoint cannot supply them.

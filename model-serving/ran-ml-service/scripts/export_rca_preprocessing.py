@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 from datasets import Dataset, concatenate_datasets
 
-from ran_ml_service.model import KPI_CHANNELS, PROTOCOL_MAP
+from ran_ml_service.model import KPI_CHANNELS, PROTOCOL_MAP, RCA_CLASSES
 
 
 def main() -> None:
@@ -35,6 +35,7 @@ def main() -> None:
         "dataset_revision": "1b3a88a440f4922edfcd1e230e42c003c0e13bdf",
         "split_seed": 42,
         "channels": KPI_CHANNELS,
+        "rca_classes": RCA_CLASSES,
         "protocol_map": {"TCP": 0, "UDP": 1, "None": 2},
         "normalization": "per-channel mean and population std over all RCA examples and 128 timesteps in the split",
     }

@@ -54,7 +54,7 @@
     "ml_class": {"type": "string"},
     "ml_class_index": {"type": ["integer", "null"], "minimum": 0, "maximum": 9},
     "ml_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
-    "ml_status": {"type": "string", "enum": ["disabled", "used", "low_confidence", "unavailable"]},
+    "ml_status": {"type": "string", "enum": ["disabled", "used", "low_confidence", "failed", "unavailable"]},
     "ml_steer_used": {"type": "boolean"}
   }
 }

@@ -19,15 +19,21 @@ _MAX_ITEMS_IN_PROMPT = 5
 
 def _ml_explanation(anomaly: EnrichedAnomaly) -> str:
     if anomaly.ml_status == "used" and anomaly.ml_class and anomaly.ml_confidence is not None:
-        return (f"accepted advisory prediction: {anomaly.ml_class} "
-                f"(confidence {anomaly.ml_confidence:.2f}); guidance used: true")
+        return (
+            f"accepted advisory prediction: {anomaly.ml_class} "
+            f"(confidence {anomaly.ml_confidence:.2f}); guidance used: true"
+        )
     if anomaly.ml_status == "low_confidence" and anomaly.ml_class and anomaly.ml_confidence is not None:
-        return (f"low-confidence prediction: {anomaly.ml_class} "
-                f"(confidence {anomaly.ml_confidence:.2f}); guidance used: false")
+        return (
+            f"low-confidence prediction: {anomaly.ml_class} "
+            f"(confidence {anomaly.ml_confidence:.2f}); guidance used: false"
+        )
     if anomaly.ml_status == "disabled":
         return "disabled; no classifier request or prediction; guidance used: false"
     if anomaly.ml_status == "unrecorded":
         return "unrecorded in this historical record; no prediction recorded"
+    if anomaly.ml_status == "failed":
+        return "failed; no valid classifier prediction; guidance used: false"
     return "unavailable; no valid classifier prediction; guidance used: false"
 
 

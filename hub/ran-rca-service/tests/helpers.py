@@ -8,11 +8,13 @@ from unittest.mock import MagicMock
 
 from ran_rca_service.models import RCAState
 
+_FIXTURE_PATH = Path(__file__).resolve().parents[3] / "hub/telco-oran/src/telco_oran/fixtures/antenna_failure.json"
+_FIXTURE = json.loads(_FIXTURE_PATH.read_text())
 SAMPLE_ANOMALY = {
     "incident_id": "test-001",
     "zone": "A",
     "application": "Twitch",
-    "kpi_window": [{"RSRP": -85.0, "DL_BLER": 0.1}] * 128,
+    "kpi_window": _FIXTURE["kpi_window"],
     "ad_label": "anomalous",
     "ad_confidence": 0.94,
 }

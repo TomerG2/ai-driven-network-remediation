@@ -19,13 +19,15 @@ def test_enriched_anomaly_includes_root_cause_category(sample_anomaly):
 
 class TestBuildChatContext:
     def test_ml_advice_is_separate_from_final_diagnosis(self, sample_anomaly):
-        anomaly = sample_anomaly.model_copy(update={
-            "ml_class": "Co-Channel Interference (Severe)",
-            "ml_class_index": 2,
-            "ml_confidence": 0.93,
-            "ml_status": "used",
-            "ml_steer_used": True,
-        })
+        anomaly = sample_anomaly.model_copy(
+            update={
+                "ml_class": "Co-Channel Interference (Severe)",
+                "ml_class_index": 2,
+                "ml_confidence": 0.93,
+                "ml_status": "used",
+                "ml_steer_used": True,
+            }
+        )
         prompt = build_chat_context("Explain", [anomaly], [], [])
         assert "accepted advisory prediction: Co-Channel Interference (Severe)" in prompt
         assert "Final LLM category: antenna_misalignment" in prompt
@@ -166,28 +168,37 @@ class TestCallModel:
 
 class TestFormatChatReply:
     def test_requested_incident_uses_its_own_ml_prediction(self, sample_anomaly):
-        older = sample_anomaly.model_copy(update={
-            "incident_id": "older-123",
-            "ml_class": "Antenna Failure",
-            "ml_confidence": 0.93,
-            "ml_status": "used",
-            "ml_steer_used": True,
-        })
-        newer = sample_anomaly.model_copy(update={
-            "incident_id": "newer-456",
-            "ml_class": "Resource Allocation Bugs",
-            "ml_confidence": 0.8,
-        })
+        older = sample_anomaly.model_copy(
+            update={
+                "incident_id": "older-123",
+                "ml_class": "Antenna Failure",
+                "ml_confidence": 0.93,
+                "ml_status": "used",
+                "ml_steer_used": True,
+            }
+        )
+        newer = sample_anomaly.model_copy(
+            update={
+                "incident_id": "newer-456",
+                "ml_class": "Resource Allocation Bugs",
+                "ml_confidence": 0.8,
+            }
+        )
         reply = format_chat_reply("Explain older-123", "analysis", [older, newer])
         assert "Incident older-123" in reply
         assert "Mantis RCA Prediction:\n- accepted advisory prediction: Antenna Failure" in reply
         assert "Resource Allocation Bugs" not in reply
 
-    @pytest.mark.parametrize("status, expected", [
-        ("low_confidence", "low-confidence prediction: Antenna Failure"),
-        ("disabled", "disabled; no classifier request or prediction"),
-        ("unrecorded", "unrecorded in this historical record"),
-    ])
+    @pytest.mark.parametrize(
+        "status, expected",
+        [
+            ("low_confidence", "low-confidence prediction: Antenna Failure"),
+            ("disabled", "disabled; no classifier request or prediction"),
+            ("unavailable", "unavailable; no valid classifier prediction"),
+            ("failed", "failed; no valid classifier prediction"),
+            ("unrecorded", "unrecorded in this historical record"),
+        ],
+    )
     def test_classification_status_is_distinct_from_diagnosis(self, sample_anomaly, status, expected):
         updates = {"ml_status": status, "ml_steer_used": False}
         if status == "low_confidence":

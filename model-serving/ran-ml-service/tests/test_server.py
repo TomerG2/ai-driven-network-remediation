@@ -116,10 +116,14 @@ class TestClassifyEndpoint:
         candidate = MantisPredictor()
         with (
             patch.object(candidate, "_resolve_weights_path", return_value="/tmp/rca.pt"),
-            patch("ran_ml_service.model.torch.load", return_value={
-                "task": "root-cause analysis", "n_classes": 10,
-                "checkpoint": "paris-noah/Mantis-8M",
-            }),
+            patch(
+                "ran_ml_service.model.torch.load",
+                return_value={
+                    "task": "root-cause analysis",
+                    "n_classes": 10,
+                    "checkpoint": "paris-noah/Mantis-8M",
+                },
+            ),
         ):
             with pytest.raises(ValueError, match="do not match TASK=detect"):
                 candidate.load()
@@ -137,8 +141,8 @@ class TestClassifyEndpoint:
         assert client.post("/v1/classify", json={"kpi_window": sample_kpi_window}).status_code == 404
 
     def test_rca_preprocess_uses_fixed_train_statistics(self, sample_kpi_window):
-        from ran_ml_service.model import MantisPredictor
         import torch
+        from ran_ml_service.model import MantisPredictor
 
         candidate = MantisPredictor()
         candidate.task = "root-cause analysis"
@@ -147,6 +151,126 @@ class TestClassifyEndpoint:
         x = candidate.preprocess(sample_kpi_window)
         assert x.shape == (1, 128, 18)
         assert x[0, 0, 0].item() == pytest.approx(sample_kpi_window[0]["RSRP"] / 2)
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            lambda window: window.pop(),
+            lambda window: window[0].pop("RSRP"),
+            lambda window: window[0].update(RSRP=None),
+            lambda window: window[0].update(RSRP="bad"),
+            lambda window: window[0].update(RSRP="-96"),
+            lambda window: window[0].update(RSRP=True),
+        ],
+    )
+    def test_classify_rejects_malformed_window_like_detect(self, client, sample_kpi_window, change):
+        window = copy.deepcopy(sample_kpi_window)
+        change(window)
+        with patch("ran_ml_service.server.TASK", "classify"):
+            assert client.post("/v1/classify", json={"kpi_window": window}).status_code == 422
+        assert client.post("/v1/detect", json={"kpi_window": window}).status_code == 422
+
+    @pytest.mark.parametrize(
+        "artifact_change",
+        [
+            lambda artifact: artifact.pop("rca_classes"),
+            lambda artifact: artifact.update(rca_classes=list(reversed(artifact["rca_classes"]))),
+            lambda artifact: artifact["train"].update(stds=[0] * 18),
+        ],
+    )
+    def test_incompatible_preprocessing_artifact_keeps_classifier_unready(self, tmp_path, artifact_change):
+        from ran_ml_service.model import MantisPredictor
+
+        artifact = json.loads((Path(__file__).resolve().parents[1] / "artifacts/rca_preprocessing.json").read_text())
+        artifact_change(artifact)
+        (tmp_path / "rca_preprocessing.json").write_text(json.dumps(artifact))
+        candidate = MantisPredictor()
+        with (
+            patch.object(candidate, "_resolve_weights_path", return_value=str(tmp_path / "rca.pt")),
+            patch("ran_ml_service.model.TASK", "classify"),
+            patch(
+                "ran_ml_service.model.torch.load",
+                return_value={
+                    "task": "root-cause analysis",
+                    "n_classes": 10,
+                    "checkpoint": "paris-noah/Mantis-8M",
+                },
+            ),
+        ):
+            with pytest.raises((ValueError, KeyError)):
+                candidate.load()
+        assert not candidate.is_ready
+
+    @pytest.mark.parametrize("missing_artifact", [True, False])
+    def test_missing_artifact_or_wrong_head_keeps_classifier_unready(self, tmp_path, missing_artifact):
+        import torch
+        from ran_ml_service.model import MantisPredictor
+
+        if not missing_artifact:
+            source = Path(__file__).resolve().parents[1] / "artifacts/rca_preprocessing.json"
+            (tmp_path / "rca_preprocessing.json").write_text(source.read_text())
+        head = torch.nn.Sequential(torch.nn.LayerNorm(64), torch.nn.Dropout(0.2), torch.nn.Linear(64, 2))
+        candidate = MantisPredictor()
+        with (
+            patch.object(candidate, "_resolve_weights_path", return_value=str(tmp_path / "rca.pt")),
+            patch("ran_ml_service.model.TASK", "classify"),
+            patch(
+                "ran_ml_service.model.torch.load",
+                return_value={
+                    "task": "root-cause analysis",
+                    "n_classes": 10,
+                    "checkpoint": "paris-noah/Mantis-8M",
+                    "head": head.state_dict(),
+                    "encoder": {},
+                },
+            ),
+            patch("ran_ml_service.model.PretrainedMantisEncoder"),
+        ):
+            with pytest.raises((FileNotFoundError, RuntimeError)):
+                candidate.load()
+        assert not candidate.is_ready
+
+    def test_valid_classifier_loads_and_predicts_with_fixed_label_mapping(self, tmp_path, sample_kpi_window):
+        import torch
+        from ran_ml_service.model import RCA_CLASSES, MantisPredictor
+
+        source = Path(__file__).resolve().parents[1] / "artifacts/rca_preprocessing.json"
+        (tmp_path / "rca_preprocessing.json").write_text(source.read_text())
+        head = torch.nn.Sequential(torch.nn.LayerNorm(64), torch.nn.Dropout(0.2), torch.nn.Linear(64, 10))
+        with torch.no_grad():
+            head[2].weight.zero_()
+            head[2].bias.zero_()
+            head[2].bias[0] = 5
+
+        class Encoder(torch.nn.Module):
+            def __init__(self, **kwargs):
+                super().__init__()
+
+            def forward(self, window):
+                return torch.zeros((window.shape[0], 64))
+
+        candidate = MantisPredictor()
+        with (
+            patch.object(candidate, "_resolve_weights_path", return_value=str(tmp_path / "rca.pt")),
+            patch("ran_ml_service.model.TASK", "classify"),
+            patch(
+                "ran_ml_service.model.torch.load",
+                return_value={
+                    "task": "root-cause analysis",
+                    "n_classes": 10,
+                    "checkpoint": "paris-noah/Mantis-8M",
+                    "head": head.state_dict(),
+                    "encoder": {},
+                },
+            ),
+            patch("ran_ml_service.model.PretrainedMantisEncoder", Encoder),
+        ):
+            candidate.load()
+
+        assert candidate.is_ready
+        assert candidate.labels == list(RCA_CLASSES)
+        assert candidate.predict(sample_kpi_window)["class_index"] == 0
+        assert candidate.predict(sample_kpi_window)["label"] == "Antenna Failure"
 
 
 class TestDetectValidation:

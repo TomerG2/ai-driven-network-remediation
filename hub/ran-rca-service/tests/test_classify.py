@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from helpers import make_state
 from ran_rca_service.config import parse_classify_confidence_threshold
@@ -30,13 +31,16 @@ async def test_confident_prediction_uses_only_window_and_optional_token():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("prediction", [
-    [],
-    {"class": RCA_CLASSES[0], "class_index": 0, "confidence": 0.59},
-    {"class": RCA_CLASSES[1], "class_index": 0, "confidence": 0.99},
-    {"class": RCA_CLASSES[0], "class_index": True, "confidence": 0.99},
-    {"class": RCA_CLASSES[0], "class_index": 0, "confidence": float("nan")},
-])
+@pytest.mark.parametrize(
+    "prediction",
+    [
+        [],
+        {"class": RCA_CLASSES[0], "class_index": 0, "confidence": 0.59},
+        {"class": RCA_CLASSES[1], "class_index": 0, "confidence": 0.99},
+        {"class": RCA_CLASSES[0], "class_index": True, "confidence": 0.99},
+        {"class": RCA_CLASSES[0], "class_index": 0, "confidence": float("nan")},
+    ],
+)
 async def test_untrusted_or_low_confidence_prediction_does_not_steer(prediction):
     response = MagicMock()
     response.json.return_value = prediction
@@ -50,7 +54,7 @@ async def test_untrusted_or_low_confidence_prediction_does_not_steer(prediction)
     ):
         result = await classify_node(make_state())
     assert result["ml_steer_used"] is False
-    assert result["ml_status"] in {"low_confidence", "unavailable"}
+    assert result["ml_status"] in {"low_confidence", "failed"}
     assert client.post.call_args.kwargs["headers"] == {}
 
 
@@ -62,8 +66,11 @@ async def test_disabled_classifier_preserves_llm_only_mode():
     ):
         result = await classify_node(make_state(ml_class="stale", ml_steer_used=True))
     assert result == {
-        "ml_class": "", "ml_class_index": None, "ml_confidence": 0.0,
-        "ml_status": "disabled", "ml_steer_used": False,
+        "ml_class": "",
+        "ml_class_index": None,
+        "ml_confidence": 0.0,
+        "ml_status": "disabled",
+        "ml_steer_used": False,
     }
     client.assert_not_called()
 
@@ -96,3 +103,63 @@ async def test_same_prediction_changes_mode_only_with_threshold(threshold, expec
     assert result["ml_status"] == expected_status
     assert result["ml_class"] == RCA_CLASSES[0]
     assert result["ml_confidence"] == 0.73
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "prediction",
+    [
+        {"class": RCA_CLASSES[0], "class_index": "0", "confidence": 0.9},
+        {"class": RCA_CLASSES[0], "class_index": 0.0, "confidence": 0.9},
+        {"class": RCA_CLASSES[0], "class_index": -1, "confidence": 0.9},
+        {"class": RCA_CLASSES[0], "class_index": 10, "confidence": 0.9},
+        {"class": RCA_CLASSES[0], "class_index": 0, "confidence": True},
+        {"class": RCA_CLASSES[0], "class_index": 0, "confidence": float("inf")},
+        {"class": RCA_CLASSES[0], "class_index": 0},
+    ],
+)
+async def test_invalid_classifier_response_is_explicit_failure(prediction):
+    response = MagicMock()
+    response.json.return_value = prediction
+    client = AsyncMock()
+    client.post.return_value = response
+    client.__aenter__.return_value = client
+    with (
+        patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", "https://example/v1/classify"),
+        patch("ran_rca_service.nodes.classify.httpx.AsyncClient", return_value=client),
+    ):
+        assert await classify_node(make_state()) == {
+            "ml_class": "",
+            "ml_class_index": None,
+            "ml_confidence": 0.0,
+            "ml_status": "failed",
+            "ml_steer_used": False,
+        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure",
+    [
+        httpx.ReadTimeout("timed out"),
+        httpx.ConnectError("connection refused"),
+        httpx.HTTPStatusError(
+            "503", request=httpx.Request("POST", "https://example/v1/classify"), response=httpx.Response(503)
+        ),
+    ],
+)
+async def test_classifier_transport_failure_uses_llm_only(failure):
+    response = MagicMock()
+    response.raise_for_status.side_effect = failure
+    client = AsyncMock()
+    client.post.return_value = response
+    client.__aenter__.return_value = client
+    with (
+        patch("ran_rca_service.config.CLASSIFY_INFERENCE_URL", "https://example/v1/classify"),
+        patch("ran_rca_service.nodes.classify.httpx.AsyncClient", return_value=client) as factory,
+    ):
+        result = await classify_node(make_state())
+    assert result["ml_status"] == "failed"
+    assert result["ml_steer_used"] is False
+    assert result["ml_confidence"] == 0.0
+    factory.assert_called_once_with(timeout=5.0)

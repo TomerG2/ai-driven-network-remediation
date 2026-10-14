@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 from collections import deque
@@ -13,6 +14,8 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
+from pydantic import ValidationError
+from ran_rca_service import config
 from ran_rca_service.config import (
     KAFKA_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
@@ -22,6 +25,7 @@ from ran_rca_service.config import (
     RECENT_ANOMALIES_LIMIT,
 )
 from ran_rca_service.graph import build_graph
+from ran_rca_service.models import AnomalyInput
 from shared.kafka import TopicConsumer
 
 EnrichedBuffer = deque[dict[str, Any]]
@@ -46,31 +50,50 @@ def _handle_anomaly_message(
 ) -> None:
     try:
         anomaly = json.loads(raw_value)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        logger.warning("Skipping malformed RAN anomaly message")
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        logger.warning(
+            "Skipping malformed RAN anomaly message sha256={}: {}",
+            hashlib.sha256(raw_value).hexdigest()[:12],
+            exc,
+        )
         return
 
     try:
+        AnomalyInput.model_validate(anomaly)
+    except ValidationError as exc:
+        incident_id = anomaly.get("incident_id", "") if isinstance(anomaly, dict) else ""
+        logger.warning("Skipping invalid RAN anomaly message incident_id={}: {}", incident_id, exc)
+        return
+
+    result: dict[str, Any] = {}
+
+    async def collect_updates() -> None:
+        async for update in graph.astream(anomaly, stream_mode="updates"):
+            for stage_result in update.values():
+                if isinstance(stage_result, dict):
+                    result.update(stage_result)
+
+    try:
         loop = _get_consumer_loop()
-        result = loop.run_until_complete(graph.ainvoke(anomaly))
+        loop.run_until_complete(collect_updates())
     except Exception:  # noqa: BLE001 - Kafka consumption must survive graph failures.
-        logger.exception("Graph invocation failed, forwarding anomaly unenriched")
-        result = {**anomaly, "root_cause_category": "unknown", "root_cause": "", "recommended_fix": "", "ml_status": "unavailable", "ml_steer_used": False}
+        logger.exception("Graph invocation failed, forwarding anomaly with available classification")
+        result.update(root_cause_category="unknown", root_cause="", recommended_fix="")
 
     enriched = {
-        "incident_id": result.get("incident_id", ""),
-        "zone": result.get("zone", ""),
-        "application": result.get("application", ""),
-        "kpi_window": result.get("kpi_window", []),
-        "ad_label": result.get("ad_label", "anomalous"),
-        "ad_confidence": result.get("ad_confidence", 0.0),
+        "incident_id": anomaly["incident_id"],
+        "zone": anomaly["zone"],
+        "application": anomaly["application"],
+        "kpi_window": anomaly["kpi_window"],
+        "ad_label": anomaly["ad_label"],
+        "ad_confidence": anomaly["ad_confidence"],
         "root_cause_category": result.get("root_cause_category", "unknown"),
         "root_cause": result.get("root_cause", ""),
         "recommended_fix": result.get("recommended_fix", ""),
         "ml_class": result.get("ml_class", ""),
         "ml_class_index": result.get("ml_class_index"),
-        "ml_confidence": result.get("ml_confidence"),
-        "ml_status": result.get("ml_status", "disabled"),
+        "ml_confidence": result.get("ml_confidence", 0.0),
+        "ml_status": result.get("ml_status", "failed" if config.CLASSIFY_INFERENCE_URL else "disabled"),
         "ml_steer_used": result.get("ml_steer_used", False),
     }
 
