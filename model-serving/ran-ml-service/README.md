@@ -75,8 +75,9 @@ ordered RCA class mapping) is invalid.
 
 `scripts/train_rca.py` runs only the 10-class pretrained Mantis RCA task from
 the TelecomTS notebook. It fixes the dataset revision, backbone revision,
-80/20 seed-42 split, class order, 35 epochs, batch size 64, and learning rate
-`1e-4`. It requires a private, durable mounted output directory. No model is
+80/20 seed-42 split, class order, and defaults of 35 epochs, batch size 64,
+and learning rate `1e-4`. A non-35-epoch `--epochs` run is marked exploratory even
+if its metrics pass. It requires a private, durable mounted output directory. No model is
 published or deployed by this command.
 
 The script reads the three Arrow shards of the pinned TelecomTS revision. If

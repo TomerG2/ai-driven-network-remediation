@@ -189,10 +189,11 @@ def main():
     historical = evaluate(predictor, test, "test", predictor_stats)
     unsupported = [predictor.predict(window(item)) for item in jamming]
     confidences = [result["confidence"] for result in unsupported]
-    passed = serving["accuracy"] >= 0.90 and serving["macro_f1"] >= 0.90
+    thresholds_met = serving["accuracy"] >= 0.90 and serving["macro_f1"] >= 0.90
+    passed = args.epochs == EPOCHS and thresholds_met
     report = {
-        "status": "validated" if passed else "failed_gate",
-        "gate": {"accuracy": 0.90, "macro_f1": 0.90, "passed": passed},
+        "status": "validated" if passed else "exploratory" if args.epochs != EPOCHS else "failed_gate",
+        "gate": {"accuracy": 0.90, "macro_f1": 0.90, "thresholds_met": thresholds_met, "passed": passed},
         "serving_style_train_statistics": serving,
         "historical_test_statistics": historical,
         "jamming_unsupported": {"sample_count": len(jamming), "predicted_classes": dict(Counter(result["label"] for result in unsupported)), "confidence": {"min": min(confidences), "median": float(np.median(confidences)), "mean": float(np.mean(confidences)), "max": max(confidences)}, "predictions": unsupported},

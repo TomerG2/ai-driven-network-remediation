@@ -6,16 +6,16 @@ tags: [time-series, telecomts, root-cause-analysis]
 
 # Mantis-8M TelecomTS RCA head
 
-The original pretrained RCA head from
+The newly trained RCA head based on
 `notebooks/telecomts_model_evaluation.ipynb` classifies anomalous 128-step,
 18-channel TelecomTS KPI windows. It uses the `paris-noah/Mantis-8M` backbone,
 which the serving image bakes in offline, plus the task checkpoint
-`mantis_pretrained_rca.pt`. Training used seed 42 and 35 epochs. No retraining
+`mantis_pretrained_rca.pt`. Recovery used seed 42 and 35 epochs. No retraining
 is part of serving.
 
 Input channel order and the ordered RCA class mapping are recorded in
 `rca_preprocessing.json`. Protocols map
-TCP→0, UDP→1, and missing/None→2. For RCA, the TelecomTS reference computes
+TCP→0, UDP→1, and missing/None/empty→2. For RCA, the TelecomTS reference computes
 each channel's mean and population standard deviation across all RCA examples
 and timesteps in a split. The service uses the fixed **training** split values
 from `rca_preprocessing.json`; it never normalizes each request window. The
@@ -37,6 +37,23 @@ The dataset revision is `1b3a88a440f4922edfcd1e230e42c003c0e13bdf`
 with split seed 42. The backbone revision used by AD parity is
 `bc7d5ab40c02133386a28e2c127f35c17c86901d`. The preprocessing file
 SHA-256 is `1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae`.
-The RCA checkpoint revision, hash, notebook logits, and MLflow artifact link
-must be recorded after the original export is recovered; the published AD
-checkpoint cannot supply them.
+
+## Recovery result (issue #196)
+
+The new 35-epoch checkpoint was evaluated through the existing predictor on
+the original 80/20 seed-42 split. On all 192 held-out 10-class RCA examples,
+training-split normalization gave **92.71% accuracy** and **0.9274 macro F1**,
+passing both 0.90 gates. The notebook-style test-split normalization comparison
+gave 92.19% accuracy and 0.9086 macro F1. These are scores for the new
+checkpoint, not the unavailable historical weights. The 58 Jamming examples
+were reported separately as unsupported inputs, with no accuracy claim. Full
+per-class precision, recall, F1, support, confusion matrix, predictions, and
+provenance are in [the validation report](../../docs/model-runs/issue-196-rca-validation.json).
+
+Checkpoint SHA-256: `0ecd02d50eed50130476c0c543503f9f3d1595507502664d3e5b8fb01c3eccfe`.
+Preprocessing SHA-256: `1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae`.
+Both files are retained privately at
+`model-serving/ran-ml-service/.private-artifacts/issue-196/` in the local
+workspace; that directory is ignored by Git and excluded from image builds.
+No publication or deployment has occurred. Synthetic TelecomTS results alone
+do not establish production generalization.
