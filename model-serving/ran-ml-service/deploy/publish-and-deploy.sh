@@ -1,214 +1,232 @@
 #!/usr/bin/env bash
-# Publish weights to HuggingFace, build+push image, deploy the InferenceService,
-# and verify the endpoint. Run from the repo root.
-#
-# {.status.url} is the in-cluster Service (*.svc.cluster.local). Callers outside
-# the cluster use the Route ran-ml-service-external. Do not name that Route
-# ran-ml-service: KServe reconciles a Route with the InferenceService's name.
-#
-# Usage:
-#   ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
-#
-# Required env:
-#   HF_TOKEN          — HuggingFace write token (or run `hf auth login` first)
-#
-# Optional env:
-#   HF_REPO              — HuggingFace repo (default: rh-ai-quickstart/mantis-ad-telecomts)
-#   WEIGHTS_PATH         — path to .pt weights file (default: model-serving/training/models/mantis_pretrained_ad.pt)
-#   REGISTRY             — container registry (default: quay.io/rh-ai-quickstart)
-#   VERSION              — image tag (default: from Makefile)
-#   ISVC_NAMESPACE       — namespace for the InferenceService and external Route
-#                          (default: model-serving). Rewritten into both manifests
-#                          before apply.
-#   USE_OPENSHIFT_BUILD  — set to 1 to build on OpenShift cluster instead of local podman (recommended on macOS)
-#   BUILDCONFIG_NAME     — OpenShift BuildConfig name (default: ran-ml-overlay)
-#   SKIP_BUILD           — set to 1 to skip image build/push
-#   SKIP_HF_UPLOAD       — set to 1 to skip HuggingFace upload
-#   SKIP_DEPLOY          — set to 1 to skip InferenceService deployment
+# Manually publish and deploy either task of the shared predictor image.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
+TASK="${TASK:-detect}"
+case "$TASK" in
+  detect)
+    HF_REPO="${HF_REPO:-TomerG2/mantis-ad-telecomts}"
+    WEIGHTS_PATH="${WEIGHTS_PATH:-model-serving/training/models/mantis_pretrained_ad.pt}"
+    MODEL_FILENAME=mantis_pretrained_ad.pt
+    ISVC_NAME="${ISVC_NAME:-ran-ml-service}"
+    MANIFEST_DIR="${MANIFEST_DIR:-model-serving/ran-ml-service/deploy}"
+    SMOKE_FIXTURE="${SMOKE_FIXTURE:-}"
+    ;;
+  classify)
+    HF_REPO="${HF_REPO:-TomerG2/mantis-rca-telecomts}"
+    WEIGHTS_PATH="${WEIGHTS_PATH:-model-serving/ran-ml-service/.private-artifacts/issue-196/mantis_pretrained_rca.pt}"
+    PREPROCESSING_PATH="${PREPROCESSING_PATH:-model-serving/ran-ml-service/.private-artifacts/issue-196/rca_preprocessing.json}"
+    MODEL_FILENAME=mantis_pretrained_rca.pt
+    CHECKPOINT_SHA256="${CHECKPOINT_SHA256:-0ecd02d50eed50130476c0c543503f9f3d1595507502664d3e5b8fb01c3eccfe}"
+    PREPROCESSING_SHA256="${PREPROCESSING_SHA256:-1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae}"
+    ISVC_NAME="${ISVC_NAME:-ran-rca-ml-service}"
+    MANIFEST_DIR="${MANIFEST_DIR:-model-serving/ran-rca-ml-service/deploy}"
+    SMOKE_FIXTURE="${SMOKE_FIXTURE:-hub/telco-oran/src/telco_oran/fixtures/antenna_failure.json}"
+    SMOKE_EXPECTED_CLASS="${SMOKE_EXPECTED_CLASS:-Antenna Failure}"
+    SMOKE_EXPECTED_INDEX="${SMOKE_EXPECTED_INDEX:-0}"
+    ;;
+  *) echo "TASK must be detect or classify" >&2; exit 1 ;;
+esac
+CHECKPOINT_SHA256="${CHECKPOINT_SHA256:-}"
+PREPROCESSING_SHA256="${PREPROCESSING_SHA256:-}"
 
-# TODO: replace with rh-ai-quickstart/mantis-ad-telecomts once the org HF repo is created
-HF_REPO="${HF_REPO:-TomerG2/mantis-ad-telecomts}"
-WEIGHTS_PATH="${WEIGHTS_PATH:-model-serving/training/models/mantis_pretrained_ad.pt}"
 REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
-if [ -z "${VERSION:-}" ]; then
-    VERSION="$(make -s version)"
-fi
-export REGISTRY VERSION
-IMAGE="${REGISTRY}/noc-ran-ml-service:${VERSION}"
+VERSION="${VERSION:-$(make -s version)}"
+IMAGE="${IMAGE:-${REGISTRY}/noc-ran-ml-service:${VERSION}}"
 ISVC_NAMESPACE="${ISVC_NAMESPACE:-model-serving}"
-USE_OPENSHIFT_BUILD="${USE_OPENSHIFT_BUILD:-}"
+ISVC_YAML="${ISVC_YAML:-${MANIFEST_DIR}/inferenceservice.yaml}"
+ROUTE_YAML="${ROUTE_YAML:-${MANIFEST_DIR}/route.yaml}"
+EXTERNAL_ROUTE_NAME="${EXTERNAL_ROUTE_NAME:-${ISVC_NAME}-external}"
+STORAGE_URI="${STORAGE_URI:-hf://${HF_REPO}}"
+ARTIFACT_REVISION="${ARTIFACT_REVISION:-}"
 BUILDCONFIG_NAME="${BUILDCONFIG_NAME:-ran-ml-overlay}"
-SKIP_BUILD="${SKIP_BUILD:-}"
-SKIP_HF_UPLOAD="${SKIP_HF_UPLOAD:-}"
-SKIP_DEPLOY="${SKIP_DEPLOY:-}"
-ISVC_YAML="model-serving/ran-ml-service/deploy/inferenceservice.yaml"
-ROUTE_YAML="model-serving/ran-ml-service/deploy/route.yaml"
-EXTERNAL_ROUTE_NAME="ran-ml-service-external"
+export REGISTRY VERSION TASK IMAGE ISVC_NAMESPACE ISVC_NAME EXTERNAL_ROUTE_NAME \
+  STORAGE_URI ARTIFACT_REVISION MODEL_FILENAME SMOKE_EXPECTED_CLASS SMOKE_EXPECTED_INDEX \
+  CHECKPOINT_SHA256 PREPROCESSING_SHA256
 
-info()  { echo "==> $*"; }
-error() { echo "ERROR: $*" >&2; exit 1; }
-
-# inferenceservice.yaml and route.yaml both default metadata.namespace to
-# model-serving. Rewrite that field so ISVC_NAMESPACE is the namespace applied.
 render_manifest() {
-    local src="$1" dest="$2"
-    sed \
-        -e "s|image: .*noc-ran-ml-service:.*|image: ${IMAGE}|" \
-        -e "s|^  namespace: model-serving$|  namespace: ${ISVC_NAMESPACE}|" \
-        "$src" > "$dest"
+  SOURCE="$1" DESTINATION="$2" KIND="$3" python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+source = Path(os.environ["SOURCE"]).read_text()
+
+def replace(pattern, replacement):
+    global source
+    source, count = re.subn(pattern, lambda _: replacement, source, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise SystemExit(f"expected one {pattern!r} in {os.environ['SOURCE']}")
+
+replace(r"^  namespace: .*", f"  namespace: {os.environ['ISVC_NAMESPACE']}")
+if os.environ["KIND"] == "isvc":
+    replace(r"^  name: ran-(?:rca-)?ml-service$", f"  name: {os.environ['ISVC_NAME']}")
+    replace(r"^        image: .*", f"        image: {os.environ['IMAGE']}")
+    replace(r"^            value: (detect|classify)$", f"            value: {os.environ['TASK']}")
+    replace(r"^            value: /mnt/models/.*\.pt$", f"            value: /mnt/models/{os.environ['MODEL_FILENAME']}")
+    storage_value = f"            value: {os.environ['STORAGE_URI']}"
+    if os.environ["ARTIFACT_REVISION"]:
+        revision = os.environ["ARTIFACT_REVISION"].replace("'", "''")
+        storage_value += f"\n          - name: ARTIFACT_REVISION\n            value: '{revision}'"
+    replace(r"^            value: hf://.*", storage_value)
+    if os.environ["TASK"] == "classify":
+        replace(r"^    ai.redhat.com/rca-checkpoint-sha256: .*", f"    ai.redhat.com/rca-checkpoint-sha256: {os.environ['CHECKPOINT_SHA256']}")
+        replace(r"^    ai.redhat.com/rca-preprocessing-sha256: .*", f"    ai.redhat.com/rca-preprocessing-sha256: {os.environ['PREPROCESSING_SHA256']}")
+    if os.environ["ARTIFACT_REVISION"]:
+        replace(r"^  annotations:$", "  annotations:\n    ai.redhat.com/artifact-revision: '" + revision + "'")
+else:
+    replace(r"^  name: ran-(?:rca-)?ml-service-external$", f"  name: {os.environ['EXTERNAL_ROUTE_NAME']}")
+    replace(r"^    name: ran-(?:rca-)?ml-service-predictor$", f"    name: {os.environ['ISVC_NAME']}-predictor")
+Path(os.environ["DESTINATION"]).write_text(source)
+PY
 }
 
-# ── Step 1: Upload weights to HuggingFace ──────────────────────────
-if [ -z "$SKIP_HF_UPLOAD" ]; then
-    info "Step 1: Uploading weights to HuggingFace ($HF_REPO)"
+verify_sha256() {
+  local path="$1" expected="$2" actual
+  actual=$(shasum -a 256 "$path" | cut -d ' ' -f 1)
+  [ "$actual" = "$expected" ] || { echo "SHA-256 mismatch: $path ($actual)" >&2; exit 1; }
+}
 
-    [ -f "$WEIGHTS_PATH" ] || error "Weights file not found: $WEIGHTS_PATH"
-
-    command -v hf >/dev/null 2>&1 \
-        || error "hf CLI not found. Install: pip install huggingface-hub"
-
-    if [ -n "${HF_TOKEN:-}" ]; then
-        export HF_TOKEN
-        info "Using HF_TOKEN from environment"
-    else
-        info "No HF_TOKEN set — assuming 'hf auth login' was already run"
-    fi
-
-    hf repos create "$HF_REPO" --type model --public --exist-ok 2>/dev/null \
-        || info "Repo $HF_REPO already exists (or create failed — continuing)"
-
-    hf upload "$HF_REPO" "$WEIGHTS_PATH" mantis_pretrained_ad.pt
-    info "Weights uploaded to https://huggingface.co/$HF_REPO"
-else
-    info "Step 1: SKIPPED (SKIP_HF_UPLOAD set)"
+if [ "$TASK" = classify ] && [ -z "${RENDER_ONLY:-}" ]; then
+  [ -f "$WEIGHTS_PATH" ] || { echo "Missing weights: $WEIGHTS_PATH" >&2; exit 1; }
+  [ -f "$PREPROCESSING_PATH" ] || { echo "Missing preprocessing: $PREPROCESSING_PATH" >&2; exit 1; }
+  verify_sha256 "$WEIGHTS_PATH" "$CHECKPOINT_SHA256"
+  verify_sha256 "$PREPROCESSING_PATH" "$PREPROCESSING_SHA256"
 fi
 
-# ── Step 2: Build and push predictor image ─────────────────────────
-if [ -z "$SKIP_BUILD" ]; then
-    if [ -n "$USE_OPENSHIFT_BUILD" ]; then
-        info "Step 2: Building image on OpenShift cluster ($BUILDCONFIG_NAME)"
-
-        oc whoami >/dev/null 2>&1 \
-            || error "Not logged into OpenShift. Run: oc login <cluster-url>"
-
-        # Ensure Dockerfile symlink exists (BuildConfig expects Dockerfile, we use Containerfile)
-        if [ ! -L "model-serving/ran-ml-service/Dockerfile" ]; then
-            info "Creating Dockerfile symlink to Containerfile"
-            ln -sf Containerfile model-serving/ran-ml-service/Dockerfile
-        fi
-
-        info "Starting build from model-serving/ran-ml-service directory"
-        BUILD_NAME=$(oc start-build "$BUILDCONFIG_NAME" \
-            --from-dir=model-serving/ran-ml-service \
-            -n "$ISVC_NAMESPACE" \
-            -o name)
-
-        info "Build started: $BUILD_NAME"
-        info "Following build logs..."
-        oc logs -f "$BUILD_NAME" -n "$ISVC_NAMESPACE" || true
-
-        info "Waiting for build to complete..."
-        oc wait --for=condition=Complete "$BUILD_NAME" \
-            -n "$ISVC_NAMESPACE" --timeout=600s
-
-        info "OpenShift build complete"
-    else
-        info "Step 2: Building and pushing predictor image ($IMAGE)"
-        make build-push-ran-ml-service REGISTRY="$REGISTRY" VERSION="$VERSION"
-        info "Image pushed"
-    fi
-else
-    info "Step 2: SKIPPED (SKIP_BUILD set)"
-fi
-
-# ── Step 3: Deploy InferenceService ────────────────────────────────
-if [ -z "$SKIP_DEPLOY" ]; then
-    info "Step 3: Deploying InferenceService to namespace $ISVC_NAMESPACE"
-
-    oc whoami >/dev/null 2>&1 \
-        || error "Not logged into OpenShift. Run: oc login <cluster-url>"
-
-    oc create namespace "$ISVC_NAMESPACE" 2>/dev/null || true
-
-    TMP_ISVC=$(mktemp)
-    TMP_ROUTE=$(mktemp)
-    trap 'rm -f "$TMP_ISVC" "$TMP_ROUTE"' EXIT
-    render_manifest "$ISVC_YAML" "$TMP_ISVC"
-    render_manifest "$ROUTE_YAML" "$TMP_ROUTE"
-    info "Applying InferenceService with image $IMAGE in namespace $ISVC_NAMESPACE"
-    oc apply -f "$TMP_ISVC"
-
-    info "Waiting for InferenceService to become ready (timeout: 5m)..."
-    oc wait --for=condition=Ready inferenceservice/ran-ml-service \
-        -n "$ISVC_NAMESPACE" --timeout=300s
-    info "InferenceService is ready"
-
-    info "Applying external Route $EXTERNAL_ROUTE_NAME"
-    oc apply -f "$TMP_ROUTE"
-else
-    info "Step 3: SKIPPED (SKIP_DEPLOY set)"
-fi
-
-# ── Step 4: Verify ─────────────────────────────────────────────────
-info "Step 4: Verifying endpoint"
-
-ISVC_URL=$(oc get inferenceservice ran-ml-service -n "$ISVC_NAMESPACE" \
-    -o jsonpath='{.status.url}' 2>/dev/null || true)
-
-if [ -z "$ISVC_URL" ]; then
-    info "Could not retrieve InferenceService URL — verify manually"
-    info "  oc get inferenceservice ran-ml-service -n $ISVC_NAMESPACE"
-    exit 0
-fi
-
-info "In-cluster URL (reachable only from inside the cluster): ${ISVC_URL}/v1/detect"
-
-info "Waiting for external Route host..."
-ROUTE_HOST=""
-for _ in $(seq 1 30); do
-    ROUTE_HOST=$(oc get route "$EXTERNAL_ROUTE_NAME" -n "$ISVC_NAMESPACE" \
-        -o jsonpath='{.spec.host}' 2>/dev/null || true)
-    if [ -n "$ROUTE_HOST" ]; then
-        break
-    fi
-    sleep 2
-done
-if [ -z "$ROUTE_HOST" ]; then
-    error "Route $EXTERNAL_ROUTE_NAME has no host in namespace $ISVC_NAMESPACE"
-fi
-
-EXTERNAL_BASE="https://${ROUTE_HOST}"
-DETECT_URL="${EXTERNAL_BASE}/v1/detect"
-info "External URL: $DETECT_URL"
-
-info "Testing health endpoint..."
-curl -skf "${EXTERNAL_BASE}/health" | python3 -m json.tool
-
-info "Testing /v1/detect with dummy payload..."
-# Minimal 128-timestep payload (all zeros + TCP protocol encoding)
-PAYLOAD=$(python3 -c "
+if [ -z "${SKIP_HF_UPLOAD:-}" ]; then
+  [ -f "$WEIGHTS_PATH" ] || { echo "Missing weights: $WEIGHTS_PATH" >&2; exit 1; }
+  command -v hf >/dev/null || { echo 'hf CLI not found' >&2; exit 1; }
+  hf repos create "$HF_REPO" --type model --public --exist-ok
+  hf upload "$HF_REPO" "$WEIGHTS_PATH" "$MODEL_FILENAME"
+  if [ "$TASK" = classify ]; then
+    hf upload "$HF_REPO" "$PREPROCESSING_PATH" rca_preprocessing.json
+    hf upload "$HF_REPO" model-serving/ran-ml-service/rca-model-card.md README.md
+    if [ -n "$ARTIFACT_REVISION" ]; then
+      release_file=$(mktemp)
+      trap 'rm -f "$release_file"' EXIT
+      RELEASE_FILE="$release_file" CHECKPOINT_SHA256="$CHECKPOINT_SHA256" \
+        PREPROCESSING_SHA256="$PREPROCESSING_SHA256" python3 - <<'PY'
 import json
-row = {
-    'RSRP': 0, 'DL_BLER': 0, 'DL_MCS': 0, 'UL_BLER': 0, 'UL_MCS': 0,
-    'UL_NPRB': 0, 'UL_SNR': 0, 'TX_Bytes': 0, 'RX_Bytes': 0,
-    'Estimated_UL_Buffer': 0, 'PRBs_DL_Current': 0, 'PRBs_UL_Current': 0,
-    'PRB_Utilization_DL': 0, 'PRB_Utilization_UL': 0,
-    'UL_Protocol': 'TCP', 'UL_NumberOfPackets': 0,
-    'DL_Protocol': 'TCP', 'DL_NumberOfPackets': 0,
-}
-print(json.dumps({'kpi_window': [row] * 128}))
-")
-curl -skf -X POST "$DETECT_URL" \
-    -H "Content-Type: application/json" \
-    -d "$PAYLOAD" | python3 -m json.tool
+import os
+from pathlib import Path
 
-info ""
-info "SUCCESS — external endpoint is live."
-info ""
-info "From outside the cluster, including CI, set:"
-info "  ADNR_DETECT_INFERENCE_URL=$DETECT_URL"
-info "Same-cluster callers can use ${ISVC_URL}/v1/detect instead."
+Path(os.environ["RELEASE_FILE"]).write_text(json.dumps({
+    "artifact_revision": os.environ["ARTIFACT_REVISION"],
+    "checkpoint_sha256": os.environ["CHECKPOINT_SHA256"],
+    "preprocessing_sha256": os.environ["PREPROCESSING_SHA256"],
+}, indent=2) + "\n")
+PY
+      hf upload "$HF_REPO" "$release_file" release.json
+      rm -f "$release_file"
+      trap - EXIT
+    fi
+  fi
+fi
+
+if [ -z "${SKIP_BUILD:-}" ]; then
+  if [ -n "${USE_OPENSHIFT_BUILD:-}" ]; then
+    oc whoami >/dev/null
+    build_context=$(mktemp -d)
+    trap 'rm -rf "$build_context"' EXIT
+    cp model-serving/ran-ml-service/{pyproject.toml,uv.lock,README.md} "$build_context/"
+    cp model-serving/ran-ml-service/Containerfile "$build_context/Dockerfile"
+    cp -R model-serving/ran-ml-service/src "$build_context/src"
+    build_name=$(oc start-build "${BUILDCONFIG_NAME}" --from-dir="$build_context" -n "$ISVC_NAMESPACE" -o name)
+    rm -rf "$build_context"
+    trap - EXIT
+    oc logs -f "$build_name" -n "$ISVC_NAMESPACE"
+    oc wait --for=condition=Complete "$build_name" -n "$ISVC_NAMESPACE" --timeout=600s
+    image_stream_tag=$(oc get buildconfig "$BUILDCONFIG_NAME" -n "$ISVC_NAMESPACE" -o jsonpath='{.spec.output.to.name}')
+    [ -n "$image_stream_tag" ] || { echo 'BuildConfig has no ImageStreamTag output' >&2; exit 1; }
+    IMAGE="image-registry.openshift-image-registry.svc:5000/${ISVC_NAMESPACE}/${image_stream_tag}"
+    export IMAGE
+  else
+    make build-push-ran-ml-service REGISTRY="$REGISTRY" VERSION="$VERSION"
+  fi
+fi
+
+if [ -n "${SKIP_DEPLOY:-}" ]; then
+  echo 'Deployment skipped'
+  exit 0
+fi
+
+tmp_isvc=$(mktemp)
+tmp_route=$(mktemp)
+trap 'rm -f "$tmp_isvc" "$tmp_route"' EXIT
+render_manifest "$ISVC_YAML" "$tmp_isvc" isvc
+render_manifest "$ROUTE_YAML" "$tmp_route" route
+if [ -n "${RENDER_ONLY:-}" ]; then
+  cat "$tmp_isvc" "$tmp_route"
+  exit 0
+fi
+oc whoami >/dev/null
+oc create namespace "$ISVC_NAMESPACE" --dry-run=client -o yaml | oc apply -f -
+oc apply -f "$tmp_isvc"
+oc wait --for=condition=Ready "inferenceservice/$ISVC_NAME" -n "$ISVC_NAMESPACE" --timeout=300s
+oc apply -f "$tmp_route"
+
+internal_base=$(oc get inferenceservice "$ISVC_NAME" -n "$ISVC_NAMESPACE" -o jsonpath='{.status.url}')
+[ -n "$internal_base" ] || { echo 'InferenceService has no status.url' >&2; exit 1; }
+oc exec -i -n "$ISVC_NAMESPACE" "deployment/${ISVC_NAME}-predictor" -- python - "$internal_base" "$TASK" <<'PY'
+import json
+import sys
+from urllib.request import urlopen
+
+base, task = sys.argv[1:]
+for path, expected in (("/health", {"status": "ok", "task": task}),
+                       ("/ready", {"ready": True, "task": task})):
+    with urlopen(base + path, timeout=15) as response:
+        assert json.load(response) == expected
+PY
+external_host=$(oc get route "$EXTERNAL_ROUTE_NAME" -n "$ISVC_NAMESPACE" -o jsonpath='{.spec.host}')
+[ -n "$external_host" ] || { echo 'Route has no host' >&2; exit 1; }
+external_base="https://${external_host}"
+endpoint="${external_base}/v1/${TASK}"
+health=$(curl --fail-with-body --silent --show-error "${external_base}/health")
+ready=$(curl --fail-with-body --silent --show-error "${external_base}/ready")
+HEALTH="$health" READY="$ready" python3 - <<'PY'
+import json
+import os
+assert json.loads(os.environ["HEALTH"]) == {"status": "ok", "task": os.environ["TASK"]}
+assert json.loads(os.environ["READY"]) == {"ready": True, "task": os.environ["TASK"]}
+PY
+
+if [ -n "$SMOKE_FIXTURE" ]; then
+  payload=$(python3 - "$SMOKE_FIXTURE" <<'PY'
+import json
+import sys
+with open(sys.argv[1]) as fixture:
+    print(json.dumps({"kpi_window": json.load(fixture)["kpi_window"]}))
+PY
+  )
+else
+  payload=$(python3 - <<'PY'
+import json
+row = {key: 0 for key in (
+    "RSRP", "DL_BLER", "DL_MCS", "UL_BLER", "UL_MCS", "UL_NPRB", "UL_SNR",
+    "TX_Bytes", "RX_Bytes", "Estimated_UL_Buffer", "PRBs_DL_Current",
+    "PRBs_UL_Current", "PRB_Utilization_DL", "PRB_Utilization_UL",
+    "UL_NumberOfPackets", "DL_NumberOfPackets")}
+row.update(UL_Protocol="TCP", DL_Protocol="TCP")
+print(json.dumps({"kpi_window": [row] * 128}))
+PY
+  )
+fi
+response=$(curl --fail-with-body --silent --show-error -X POST "$endpoint" -H 'Content-Type: application/json' -d "$payload")
+RESPONSE="$response" python3 - <<'PY'
+import json
+import os
+body = json.loads(os.environ["RESPONSE"])
+assert body.get("class_index") in range(10 if os.environ["TASK"] == "classify" else 2), body
+assert 0 <= body.get("confidence", -1) <= 1, body
+assert isinstance(body.get("class" if os.environ["TASK"] == "classify" else "label"), str), body
+if os.environ["TASK"] == "classify":
+    assert body["class"] == os.environ["SMOKE_EXPECTED_CLASS"], body
+    assert body["class_index"] == int(os.environ["SMOKE_EXPECTED_INDEX"]), body
+print(json.dumps(body, indent=2))
+PY
+echo "Ready: $endpoint"
+echo "Same-cluster: ${internal_base}/v1/${TASK}"

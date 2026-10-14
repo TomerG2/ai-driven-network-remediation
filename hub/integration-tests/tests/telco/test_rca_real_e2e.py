@@ -27,14 +27,10 @@ import pytest
 pytestmark = [pytest.mark.telco, pytest.mark.integration]
 
 ROOT = Path(__file__).resolve().parents[4]
-FIXTURE = ROOT / "hub/telco-oran/src/telco_oran/fixtures/antenna_failure.json"
-# Observed from the recovered issue-196 checkpoint through /v1/classify on
-# this fixture. These are real serving results, not a stand-in prediction.
-PINNED_RCA_PREDICTION = {
-    "class": "Antenna Failure",
-    "class_index": 0,
-    "confidence": 0.9293,
-}
+SCENARIO = os.getenv("RCA_FIXTURE_SCENARIO", "antenna_failure")
+FIXTURE = ROOT / "hub/telco-oran/src/telco_oran/fixtures" / f"{SCENARIO}.json"
+REFERENCE = json.loads((ROOT / "model-serving/ran-ml-service/tests/fixtures/rca_reference.json").read_text())
+PINNED_RCA_PREDICTION = next(case for case in REFERENCE["cases"] if case["fixture"] == FIXTURE.name)
 TEMPLATES = {
     "antenna_misalignment": "ran-antenna-tilt-adjust",
     "interference": "ran-interference-mitigation",
@@ -156,13 +152,14 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         assert "used" in evidence["runs"], "Run the guided scenario first to pin the model prediction"
     if mode == "disabled":
         assert "low_confidence" in evidence["runs"], "Run the unsteered scenario before disabled mode"
+    assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == PINNED_RCA_PREDICTION["fixture_sha256"]
     fixture = json.loads(FIXTURE.read_text())
     rca_instance = _rca_instance()
     with httpx.Client(base_url=rca_url, timeout=20.0) as client:
         assert client.get("/ready").json() == {"ready": True}
     invalid_id, malformed_hash = _publish_invalid_anomalies()
     _wait_for_invalid_rejection(invalid_id, malformed_hash, rca_instance.splitlines()[0])
-    trigger = ran_chatbot_client.post("/api/demo/trigger", json={"scenario": "antenna_failure"})
+    trigger = ran_chatbot_client.post("/api/demo/trigger", json={"scenario": SCENARIO})
     assert trigger.status_code == 200
     incident_id = trigger.json()["incident_id"]
 

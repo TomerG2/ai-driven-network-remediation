@@ -18,11 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HF_HUB_OFFLINE: "1"
+      RCA_ARTIFACT_COMMIT: ${{ vars.RCA_ARTIFACT_COMMIT }}
     steps:
       - name: Set model paths
         run: |
           echo "MODEL_DIR=${{ runner.temp }}/ran-ml-models" >> "${GITHUB_ENV}"
           echo "MANTIS_MODEL_PATH=${{ runner.temp }}/ran-ml-models/mantis_pretrained_ad.pt" >> "${GITHUB_ENV}"
+          echo "RCA_CHECKPOINT_PATH=${{ runner.temp }}/ran-ml-models/mantis_pretrained_rca.pt" >> "${GITHUB_ENV}"
 
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -44,10 +46,22 @@ jobs:
           HF_HUB_OFFLINE: "0"
         run: |
           mkdir -p "${MODEL_DIR}"
+          if [[ ! "${RCA_ARTIFACT_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Set RCA_ARTIFACT_COMMIT to the published RCA repository commit SHA" >&2
+            exit 1
+          fi
           curl --fail --location --retry 3 \
             --output "${MANTIS_MODEL_PATH}" \
             "https://huggingface.co/TomerG2/mantis-ad-telecomts/resolve/9f1ff8a3f59f3f2d74ce001d7f0dbb6695676ec4/mantis_pretrained_ad.pt"
           echo "9b00f1a5705c196d218110bf7c39027bedf811675aada74e8742f8d0c953a078  ${MANTIS_MODEL_PATH}" | sha256sum --check
+          curl --fail --location --retry 3 \
+            --output "${RCA_CHECKPOINT_PATH}" \
+            "https://huggingface.co/TomerG2/mantis-rca-telecomts/resolve/${RCA_ARTIFACT_COMMIT}/mantis_pretrained_rca.pt"
+          curl --fail --location --retry 3 \
+            --output "${MODEL_DIR}/rca_preprocessing.json" \
+            "https://huggingface.co/TomerG2/mantis-rca-telecomts/resolve/${RCA_ARTIFACT_COMMIT}/rca_preprocessing.json"
+          echo "0ecd02d50eed50130476c0c543503f9f3d1595507502664d3e5b8fb01c3eccfe  ${RCA_CHECKPOINT_PATH}" | sha256sum --check
+          echo "1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae  ${MODEL_DIR}/rca_preprocessing.json" | sha256sum --check
           backbone_path=$(uv run python -c "from huggingface_hub import snapshot_download; print(snapshot_download('paris-noah/Mantis-8M', revision='bc7d5ab40c02133386a28e2c127f35c17c86901d'))")
           echo "MANTIS_CHECKPOINT=${backbone_path}" >> "${GITHUB_ENV}"
 
