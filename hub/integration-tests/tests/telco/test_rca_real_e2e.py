@@ -28,6 +28,13 @@ pytestmark = [pytest.mark.telco, pytest.mark.integration]
 
 ROOT = Path(__file__).resolve().parents[4]
 FIXTURE = ROOT / "hub/telco-oran/src/telco_oran/fixtures/antenna_failure.json"
+# Observed from the recovered issue-196 checkpoint through /v1/classify on
+# this fixture. These are real serving results, not a stand-in prediction.
+PINNED_RCA_PREDICTION = {
+    "class": "Antenna Failure",
+    "class_index": 0,
+    "confidence": 0.9293,
+}
 TEMPLATES = {
     "antenna_misalignment": "ran-antenna-tilt-adjust",
     "interference": "ran-interference-mitigation",
@@ -186,6 +193,9 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         assert anomaly["ml_class_index"] in range(10)
         confidence = anomaly["ml_confidence"]
         assert 0 < confidence < 1
+        assert anomaly["ml_class"] == PINNED_RCA_PREDICTION["class"]
+        assert anomaly["ml_class_index"] == PINNED_RCA_PREDICTION["class_index"]
+        assert confidence == pytest.approx(PINNED_RCA_PREDICTION["confidence"], abs=1e-4)
         assert (confidence >= float(threshold)) is (mode == "used")
         if mode == "low_confidence":
             pinned = evidence["prediction"]
