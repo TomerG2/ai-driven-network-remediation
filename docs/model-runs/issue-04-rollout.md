@@ -122,7 +122,10 @@ the same-cluster URL is
 The upstream `RCA_ARTIFACT_COMMIT` Actions variable pins the final commit.
 Files downloaded from that exact commit matched the expected SHA-256 values.
 With the downloaded RCA files and pinned AD checkpoint, all 45 model-serving
-tests passed locally, including both real-checkpoint parity tests.
+tests passed locally, including both real-checkpoint parity tests. The dedicated
+[hosted parity run](https://github.com/TomerG2/ai-driven-network-remediation/actions/runs/38758087687)
+also passed against the pushed `feat/rca-ml-integration` branch and the final
+artifact commit.
 
 The existing detect InferenceService remained Ready with task `detect`. Its
 same-cluster Service and the configured external TLS Route returned detect
