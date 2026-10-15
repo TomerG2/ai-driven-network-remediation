@@ -58,8 +58,7 @@ independent of the training directory and repository workspace. A workspace
 copy at `model-serving/ran-ml-service/.private-artifacts/issue-196/` is ignored
 by Git and excluded from image builds. Both copies have matching hashes; the
 persistent copy was reloaded through the classifier.
-No publication or deployment has occurred. Synthetic TelecomTS results alone
-do not establish production generalization.
+Synthetic TelecomTS results alone do not establish production generalization.
 
 ## Pinned serving reference coverage
 
@@ -67,8 +66,8 @@ do not establish production generalization.
 ten logits for four TelecomTS fixtures using the recovered checkpoint. It also
 pins each fixture's SHA-256, the notebook hash, the dataset revision and split
 seed, the ordered ten-class mapping, and both artifact hashes. The dedicated
-model-serving parity CI is configured to compare class index and label exactly
-once the artifacts are published and `RCA_ARTIFACT_COMMIT` is set, with absolute
+model-serving parity CI compares class index and label exactly when
+`RCA_ARTIFACT_COMMIT` is set to the published repository commit, with absolute
 tolerances of 0.0001 for confidence and logits. These are local serving
 observations, not outputs from the unavailable historical notebook checkpoint.
 

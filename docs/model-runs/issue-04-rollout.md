@@ -16,9 +16,9 @@ labels, confidence, and all ten logits are pinned. Absolute tolerances are
 0.0001 for confidence and logits. The dedicated model-serving CI verifies
 the checkpoint, preprocessing, notebook, and fixture hashes and keeps the AD
 parity test alongside RCA. The heavy checkpoint test is outside hub unit tests.
-After publication, set the repository variable `RCA_ARTIFACT_COMMIT` to the
-40-character Hugging Face commit SHA containing the final `release.json` upload.
-CI downloads both RCA files from that immutable revision.
+The repository variable `RCA_ARTIFACT_COMMIT` pins the 40-character Hugging Face
+commit SHA containing the final `release.json` upload. CI downloads both RCA
+files from that immutable revision.
 
 ## Repeatable commands
 
@@ -97,13 +97,56 @@ build `ran-ml-overlay-6` succeeded in `model-serving` and pushed
 `ran-ml-service:0.1.6-rca-196` with digest
 `sha256:3ab782242316bdf9878f83541655ecb2d0e79e77703c98e5214de8af31c61b7c`.
 The BuildConfig output tag was restored to its earlier value afterward.
-On 2026-10-15, the local checkpoint and preprocessing hashes matched the pinned
-values, the four-case real-checkpoint parity test passed, and predictor typecheck
-passed. Hugging Face authentication was available, but the classifier repository
-was absent. Automatic approval review rejected publishing the private 31 MB
-checkpoint and metadata to a public repository because the generic issue request
-did not clearly authorize that payload and destination. OpenShift API access was
-reachable with network access but returned `Unauthorized` for the current login.
-Publication, initial deployment, compatible refresh, and the post-refresh
-incident remain unverified until explicit public-upload approval and a valid
-OpenShift login are available.
+On 2026-10-15 the user explicitly approved publishing the newly trained RCA
+checkpoint to the public Hugging Face repository, and the OpenShift login was
+refreshed. The shared command published the checkpoint, preprocessing bundle,
+model card, and `release.json` to `TomerG2/mantis-rca-telecomts`. The initial
+artifact commit was `1a6767e656884d90c6ab35a1d85d4b3eed6e1019`. KServe
+staged the files and brought `ran-rca-ml-service` to Ready at InferenceService
+generation 1 with `ARTIFACT_REVISION=rca-196-initial`. The shared image was the
+immutable digest above. Both the same-cluster Service and TLS Route returned
+`Antenna Failure`, class index 0, confidence 0.9293 for the smoke fixture.
+
+The first compatible refresh reused the image and artifact bytes, publishing a
+new `release.json` at commit `2bf794bc808a8293cafd8693b2ce46dad7c0a954`.
+InferenceService generation and predictor Deployment revision advanced to 2,
+with `ARTIFACT_REVISION=rca-196-refresh-1`. After configuring the CI hub, the
+same command published `rca-196-refresh-2` at commit
+`1ffdc117e0f0c93ba779f0b5f69323d5f1c38163`. Generation and Deployment
+revision advanced to 3, and a new ready predictor pod staged the artifacts.
+The same Service URL and Route remained in use throughout; both smoke requests
+returned class index 0 and confidence 0.9293 after each refresh. The Route is
+`https://ran-rca-ml-service-external-model-serving.apps.ai-dev02.kni.syseng.devcluster.openshift.com/v1/classify`;
+the same-cluster URL is
+`http://ran-rca-ml-service-predictor.model-serving.svc.cluster.local/v1/classify`.
+The upstream `RCA_ARTIFACT_COMMIT` Actions variable pins the final commit.
+Files downloaded from that exact commit matched the expected SHA-256 values.
+With the downloaded RCA files and pinned AD checkpoint, all 45 model-serving
+tests passed locally, including both real-checkpoint parity tests.
+
+The existing detect InferenceService remained Ready with task `detect`. Its
+same-cluster Service and the configured external TLS Route returned detect
+health and readiness; the Route classified the antenna fixture as anomalous
+with class index 1 and confidence 0.9995.
+
+For the incident probe, the available `ci-hub-telco-oran` release had older
+0.1.5 RCA/chatbot images and no classifier URL. The current RCA and chatbot
+images were built and staged in that namespace's internal registry, then only
+those two Deployments were updated to immutable image digests. The RCA
+Deployment was configured with the same-cluster URL above, an empty token, and
+threshold 0 **before** `rca-196-refresh-2`; its URL was unchanged afterward.
+Both Deployments were Ready. This targeted CI update is outside the saved Helm
+release values, so a future Helm upgrade should set
+`telco.ranRcaService.env.classifyInferenceUrl` and deploy the current consumer
+images to retain this configuration.
+
+The post-refresh `co_channel_interference_severe` fixture produced incident
+`9334e533`. The [live evidence](issue-04-incident.json) records the ML advice:
+Co-Channel Interference (Severe), index 2, confidence 0.9502, status `used`.
+The integration probe checked the original incident identity and complete KPI
+window across AD, anomaly Kafka, enriched Kafka, and the API; it also checked
+rejection of malformed Kafka messages. RAG/Granite supplied the final
+operational category `interference`, remediation selected
+`ran-interference-mitigation`, and chat distinguished the accepted ML advice
+from the final LLM category. The live probe passed on 2026-10-15. Current RCA
+and chatbot consumer unit suites passed locally with 107 and 70 tests.
