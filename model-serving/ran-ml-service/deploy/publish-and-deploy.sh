@@ -89,7 +89,21 @@ verify_sha256() {
   [ "$actual" = "$expected" ] || { echo "SHA-256 mismatch: $path ($actual)" >&2; exit 1; }
 }
 
-if [ "$TASK" = classify ] && [ -z "${RENDER_ONLY:-}" ]; then
+render_manifests() {
+  tmp_isvc=$(mktemp)
+  tmp_route=$(mktemp)
+  trap 'rm -f "$tmp_isvc" "$tmp_route"' EXIT
+  render_manifest "$ISVC_YAML" "$tmp_isvc" isvc
+  render_manifest "$ROUTE_YAML" "$tmp_route" route
+}
+
+if [ -n "${RENDER_ONLY:-}" ]; then
+  render_manifests
+  cat "$tmp_isvc" "$tmp_route"
+  exit 0
+fi
+
+if [ "$TASK" = classify ]; then
   [ -f "$WEIGHTS_PATH" ] || { echo "Missing weights: $WEIGHTS_PATH" >&2; exit 1; }
   [ -f "$PREPROCESSING_PATH" ] || { echo "Missing preprocessing: $PREPROCESSING_PATH" >&2; exit 1; }
   verify_sha256 "$WEIGHTS_PATH" "$CHECKPOINT_SHA256"
@@ -153,15 +167,7 @@ if [ -n "${SKIP_DEPLOY:-}" ]; then
   exit 0
 fi
 
-tmp_isvc=$(mktemp)
-tmp_route=$(mktemp)
-trap 'rm -f "$tmp_isvc" "$tmp_route"' EXIT
-render_manifest "$ISVC_YAML" "$tmp_isvc" isvc
-render_manifest "$ROUTE_YAML" "$tmp_route" route
-if [ -n "${RENDER_ONLY:-}" ]; then
-  cat "$tmp_isvc" "$tmp_route"
-  exit 0
-fi
+render_manifests
 oc whoami >/dev/null
 oc create namespace "$ISVC_NAMESPACE" --dry-run=client -o yaml | oc apply -f -
 oc apply -f "$tmp_isvc"
@@ -215,7 +221,23 @@ print(json.dumps({"kpi_window": [row] * 128}))
 PY
   )
 fi
-response=$(curl --fail-with-body --silent --show-error -X POST "$endpoint" -H 'Content-Type: application/json' -d "$payload")
+
+internal_response=$(oc exec -i -n "$ISVC_NAMESPACE" "deployment/${ISVC_NAME}-predictor" -- \
+  python -c '
+import sys
+from urllib.request import Request, urlopen
+
+base, task = sys.argv[1:]
+request = Request(
+    base + "/v1/" + task,
+    data=sys.stdin.buffer.read(),
+    headers={"Content-Type": "application/json"},
+)
+print(urlopen(request, timeout=30).read().decode())
+' \
+  "$internal_base" "$TASK" <<< "$payload")
+external_response=$(curl --fail-with-body --silent --show-error -X POST "$endpoint" -H 'Content-Type: application/json' -d "$payload")
+for response in "$internal_response" "$external_response"; do
 RESPONSE="$response" python3 - <<'PY'
 import json
 import os
@@ -228,5 +250,6 @@ if os.environ["TASK"] == "classify":
     assert body["class_index"] == int(os.environ["SMOKE_EXPECTED_INDEX"]), body
 print(json.dumps(body, indent=2))
 PY
+done
 echo "Ready: $endpoint"
 echo "Same-cluster: ${internal_base}/v1/${TASK}"

@@ -49,10 +49,11 @@ TASK=detect SKIP_HF_UPLOAD=1 SKIP_BUILD=1 VERSION=<detect-image-tag> \
 name, Route name, and smoke fixture can be overridden through the command's
 environment variables. The classifier command verifies local artifact hashes,
 publishes a model card and `release.json`, checks KServe readiness and task
-identity from the same-cluster Service, then calls `/v1/classify` through the
-external TLS Route. The refresh changes the predictor environment to force a
-KServe revision even when the model bytes are compatible. There is no automatic
-registry promotion.
+identity from the same-cluster Service, then smoke-tests `/v1/classify` through
+both the same-cluster Service and external TLS Route. `RENDER_ONLY=1` prints the
+manifests without publishing, building, or deploying. The refresh changes the
+predictor environment to force a KServe revision even when the model bytes are
+compatible. There is no automatic registry promotion.
 
 Set `ADNR_CLASSIFY_INFERENCE_URL` to the full same-cluster URL from the command
 output, or to `https://<route-host>/v1/classify` for an external hub. Keep it
@@ -91,14 +92,18 @@ host, deployed consumer URL, and probe evidence when the live rollout runs.
 
 ## Execution status
 
-Local hash and parity checks passed on 2026-10-14. The source-only shared image
+Local hash and parity checks passed on 2026-10-15. The source-only shared image
 build `ran-ml-overlay-6` succeeded in `model-serving` and pushed
 `ran-ml-service:0.1.6-rca-196` with digest
 `sha256:3ab782242316bdf9878f83541655ecb2d0e79e77703c98e5214de8af31c61b7c`.
 The BuildConfig output tag was restored to its earlier value afterward.
-Automatic approval review
-rejected uploading the private checkpoint and preprocessing bundle to the
-Hugging Face repository. The public repository does not currently expose the
-checkpoint. Publication, initial deployment, compatible refresh, and the
-post-refresh incident cannot be reported as successful until that approval and
-the live checks complete.
+On 2026-10-15, the local checkpoint and preprocessing hashes matched the pinned
+values, the four-case real-checkpoint parity test passed, and predictor typecheck
+passed. Hugging Face authentication was available, but the classifier repository
+was absent. Automatic approval review rejected publishing the private 31 MB
+checkpoint and metadata to a public repository because the generic issue request
+did not clearly authorize that payload and destination. OpenShift API access was
+reachable with network access but returned `Unauthorized` for the current login.
+Publication, initial deployment, compatible refresh, and the post-refresh
+incident remain unverified until explicit public-upload approval and a valid
+OpenShift login are available.

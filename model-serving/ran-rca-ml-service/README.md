@@ -28,7 +28,9 @@ The command verifies local artifact hashes, applies the InferenceService and
 Route in `ISVC_NAMESPACE` (default `model-serving`), waits for readiness, checks
 task identity on `/health` and `/ready`, and sends the checked-in antenna
 fixture to `/v1/classify` over the TLS Route. It checks the in-cluster Service
-from the predictor pod and validates the Route's TLS certificate. A changed `ARTIFACT_REVISION`
+from the predictor pod with the same smoke request and validates the Route's TLS
+certificate. `RENDER_ONLY=1` prints the manifests without publishing or deploying.
+A changed `ARTIFACT_REVISION`
 changes the predictor environment, triggering a revision even when
 `STORAGE_URI` stays the same. The command republishes `release.json` with the
 new revision and pinned hashes, creating a remote artifact commit. `STORAGE_URI`,
