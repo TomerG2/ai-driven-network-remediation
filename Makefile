@@ -73,9 +73,9 @@ RAN_ANOMALY_CONTEXT         := hub
 RAN_RCA_CONTAINERFILE       := hub/ran-rca-service/Containerfile
 RAN_RCA_CONTEXT             := hub
 
-# ran-ml-service is self-contained (no shared dep); context is its own dir.
-RAN_ML_SERVICE_CONTAINERFILE := model-serving/ran-ml-service/Containerfile
-RAN_ML_SERVICE_CONTEXT       := model-serving/ran-ml-service
+# Detect and RCA use the same predictor image from the shared build context.
+RAN_ML_SERVICE_CONTAINERFILE := model-serving/shared-ml-predictor/Containerfile
+RAN_ML_SERVICE_CONTEXT       := model-serving/shared-ml-predictor
 
 # agent-service, chatbot-service, and ran-chatbot-service all depend on the
 # sibling shared package via a local uv path source, so their build context
