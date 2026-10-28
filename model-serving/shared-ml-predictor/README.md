@@ -13,6 +13,25 @@ artifact repository, and checkpoint by `TASK`. The checkpoints are published
 separately to Hugging Face and staged into each pod under `/mnt/models`; the
 container image includes the common predictor code and offline Mantis backbone.
 
+To build the shared image once and deploy both services in one command, use:
+
+```sh
+TASK=both SKIP_HF_UPLOAD=true VERSION=<new-image-tag> \
+  ./model-serving/shared-ml-predictor/deploy/publish-and-deploy.sh
+```
+
+`TASK=both` deploys detect and classify with the same image and namespace. RCA
+artifacts must already be published at the pinned `RCA_ARTIFACT_COMMIT`.
+For an existing image, add `SKIP_BUILD=true IMAGE=<image-reference>`.
+`USE_OPENSHIFT_BUILD=true` also works with `TASK=both`; the command builds once
+and uses the BuildConfig output for both services.
+
+`SKIP_HF_UPLOAD`, `SKIP_BUILD`, `SKIP_DEPLOY`, `USE_OPENSHIFT_BUILD`, and
+`RENDER_ONLY` accept `true`/`false` or `1`/`0` (default `false`). A false value
+runs the step. Publish detect and classify checkpoints separately with
+`TASK=detect` or `TASK=classify`; classifier upload requires `SKIP_DEPLOY=true`
+so the verified artifact commit can be pinned before deployment.
+
 ## Deploy or refresh detect
 
 Use the deploy script rather than applying the InferenceService by hand:

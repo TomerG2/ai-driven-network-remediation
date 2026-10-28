@@ -22,6 +22,11 @@ files from that immutable revision, including for pull requests from forks.
 
 ## Repeatable commands
 
+To deploy both services from the same existing image in one command, run
+`TASK=both SKIP_HF_UPLOAD=true SKIP_BUILD=true IMAGE=<shared-image-reference>`
+with the shared `publish-and-deploy.sh` command. To build the image once before
+deploying both, omit `SKIP_BUILD=true` and set a new `VERSION`.
+
 For a fresh checkout, deploy the already published RCA artifacts from Hugging
 Face. Only `oc` access and a published shared predictor image are needed:
 

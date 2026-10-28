@@ -1,10 +1,54 @@
 #!/usr/bin/env bash
-# Manually publish and deploy either task of the shared predictor image.
+# Publish artifacts, build the shared image, and deploy one or both tasks.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
+SCRIPT_PATH="$REPO_ROOT/model-serving/shared-ml-predictor/deploy/publish-and-deploy.sh"
+
+normalize_bool() {
+  local name="$1" value="${!1:-false}"
+  case "$value" in
+    1|true) printf -v "$name" '%s' true ;;
+    0|false) printf -v "$name" '%s' false ;;
+    *) echo "$name must be true, false, 1, or 0" >&2; exit 1 ;;
+  esac
+  export "${name?}"
+}
+for flag in SKIP_HF_UPLOAD SKIP_BUILD SKIP_DEPLOY USE_OPENSHIFT_BUILD RENDER_ONLY; do
+  normalize_bool "$flag"
+done
+
 TASK="${TASK:-detect}"
+if [ "$TASK" = both ]; then
+  if [ "$RENDER_ONLY" = true ]; then
+    TASK=detect "$SCRIPT_PATH"
+    TASK=classify "$SCRIPT_PATH"
+    exit 0
+  fi
+  [ "$SKIP_HF_UPLOAD" = true ] || {
+    echo 'TASK=both requires SKIP_HF_UPLOAD=true; publish each checkpoint separately' >&2
+    exit 1
+  }
+  if [ "$SKIP_BUILD" = false ]; then
+    TASK=detect SKIP_DEPLOY=true "$SCRIPT_PATH"
+    if [ "$USE_OPENSHIFT_BUILD" = true ]; then
+      namespace="${ISVC_NAMESPACE:-model-serving}"
+      buildconfig="${BUILDCONFIG_NAME:-ran-ml-overlay}"
+      image_stream_tag=$(oc get buildconfig "$buildconfig" -n "$namespace" -o jsonpath='{.spec.output.to.name}')
+      [ -n "$image_stream_tag" ] || { echo 'BuildConfig has no ImageStreamTag output' >&2; exit 1; }
+      IMAGE="image-registry.openshift-image-registry.svc:5000/${namespace}/${image_stream_tag}"
+      export IMAGE
+    fi
+  fi
+  if [ "$SKIP_DEPLOY" = true ]; then
+    echo 'Deployment skipped'
+    exit 0
+  fi
+  TASK=detect SKIP_BUILD=true "$SCRIPT_PATH"
+  TASK=classify SKIP_BUILD=true "$SCRIPT_PATH"
+  exit 0
+fi
 case "$TASK" in
   detect)
     HF_REPO="${HF_REPO:-TomerG2/mantis-ad-telecomts}"
@@ -30,7 +74,7 @@ case "$TASK" in
     SMOKE_EXPECTED_CLASS="${SMOKE_EXPECTED_CLASS:-Antenna Failure}"
     SMOKE_EXPECTED_INDEX="${SMOKE_EXPECTED_INDEX:-0}"
     ;;
-  *) echo "TASK must be detect or classify" >&2; exit 1 ;;
+  *) echo "TASK must be detect, classify, or both" >&2; exit 1 ;;
 esac
 CHECKPOINT_SHA256="${CHECKPOINT_SHA256:-}"
 PREPROCESSING_SHA256="${PREPROCESSING_SHA256:-}"
@@ -100,18 +144,18 @@ render_manifests() {
   render_manifest "$ROUTE_YAML" "$tmp_route" route
 }
 
-if [ -n "${RENDER_ONLY:-}" ]; then
+if [ "$RENDER_ONLY" = true ]; then
   render_manifests
   cat "$tmp_isvc" "$tmp_route"
   exit 0
 fi
 
-if [ "$TASK" = classify ] && [ -z "${SKIP_HF_UPLOAD:-}" ] && [ -z "${SKIP_DEPLOY:-}" ]; then
+if [ "$TASK" = classify ] && [ "$SKIP_HF_UPLOAD" = false ] && [ "$SKIP_DEPLOY" = false ]; then
   echo 'Publish RCA artifacts with SKIP_DEPLOY=1, then deploy their verified commit with RCA_ARTIFACT_COMMIT' >&2
   exit 1
 fi
 
-if [ -z "${SKIP_HF_UPLOAD:-}" ]; then
+if [ "$SKIP_HF_UPLOAD" = false ]; then
   [ -f "$WEIGHTS_PATH" ] || { echo "Missing weights: $WEIGHTS_PATH" >&2; exit 1; }
   if [ "$TASK" = classify ]; then
     [ -f "$PREPROCESSING_PATH" ] || { echo "Missing preprocessing: $PREPROCESSING_PATH" >&2; exit 1; }
@@ -146,8 +190,8 @@ PY
   fi
 fi
 
-if [ -z "${SKIP_BUILD:-}" ]; then
-  if [ -n "${USE_OPENSHIFT_BUILD:-}" ]; then
+if [ "$SKIP_BUILD" = false ]; then
+  if [ "$USE_OPENSHIFT_BUILD" = true ]; then
     oc whoami >/dev/null
     build_context=$(mktemp -d)
     trap 'rm -rf "$build_context"' EXIT
@@ -168,7 +212,7 @@ if [ -z "${SKIP_BUILD:-}" ]; then
   fi
 fi
 
-if [ -n "${SKIP_DEPLOY:-}" ]; then
+if [ "$SKIP_DEPLOY" = true ]; then
   echo 'Deployment skipped'
   exit 0
 fi

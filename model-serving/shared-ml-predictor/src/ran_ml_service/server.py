@@ -69,13 +69,13 @@ def ready():
 @app.post("/v1/detect", response_model=DetectResponse)
 def detect(req: DetectRequest) -> DetectResponse | JSONResponse:
     """Binary anomaly detection: is this KPI window anomalous or normal?"""
+    if TASK != "detect":
+        return JSONResponse({"error": "wrong task"}, status_code=404)
     if not predictor.is_ready:
         return JSONResponse(
             {"error": "model not loaded"},
             status_code=503,
         )
-    if TASK != "detect":
-        return JSONResponse({"error": "wrong task"}, status_code=404)
 
     try:
         result = predictor.predict(req.kpi_window)

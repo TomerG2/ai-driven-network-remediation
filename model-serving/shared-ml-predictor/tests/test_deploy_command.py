@@ -122,3 +122,50 @@ def test_classifier_deploy_from_hugging_face_needs_no_local_artifacts():
         check=True,
     )
     assert "Deployment skipped" in result.stdout
+
+
+def test_both_renders_detect_and_classify_manifests():
+    rendered = render("both", SKIP_HF_UPLOAD="false", SKIP_BUILD="false")
+    assert "name: ran-ml-service\n" in rendered
+    assert "name: ran-rca-ml-service\n" in rendered
+    assert rendered.count("kind: InferenceService") == 2
+
+
+def test_false_skip_hf_upload_requires_local_weights():
+    result = subprocess.run(
+        [str(COMMAND)], cwd=ROOT,
+        env={"PATH": os.environ["PATH"], "TASK": "detect", "SKIP_HF_UPLOAD": "0",
+             "SKIP_BUILD": "1", "SKIP_DEPLOY": "1", "WEIGHTS_PATH": "/not-present/weights.pt",
+             "VERSION": "test-version"},
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "Missing weights" in result.stderr
+
+
+def test_both_builds_shared_image_once_with_false_skip_build(tmp_path):
+    fake_make = tmp_path / "make"
+    fake_make.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$MAKE_CALLS"\n')
+    fake_make.chmod(0o755)
+    calls = tmp_path / "make-calls"
+    result = subprocess.run(
+        [str(COMMAND)], cwd=ROOT,
+        env={"PATH": f"{tmp_path}:{os.environ['PATH']}", "TASK": "both",
+             "SKIP_HF_UPLOAD": "true", "SKIP_BUILD": "0", "SKIP_DEPLOY": "1",
+             "VERSION": "test-version", "MAKE_CALLS": str(calls)},
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert calls.read_text().splitlines() == [
+        "build-push-ran-ml-service REGISTRY=quay.io/rh-ai-quickstart VERSION=test-version"
+    ]
+
+
+def test_invalid_boolean_flag_fails_with_clear_message():
+    result = subprocess.run(
+        [str(COMMAND)], cwd=ROOT,
+        env={"PATH": os.environ["PATH"], "TASK": "detect", "SKIP_BUILD": "maybe"},
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "SKIP_BUILD must be true, false, 1, or 0" in result.stderr

@@ -104,6 +104,12 @@ class TestDetectEndpoint:
         response = unloaded_client.post("/v1/detect", json={"kpi_window": sample_kpi_window})
         assert response.status_code == 503
 
+    def test_detect_wrong_task_even_when_model_not_loaded(self, unloaded_client, sample_kpi_window):
+        with patch("ran_ml_service.server.TASK", "classify"):
+            response = unloaded_client.post("/v1/detect", json={"kpi_window": sample_kpi_window})
+        assert response.status_code == 404
+        assert response.json() == {"error": "wrong task"}
+
 
 class TestClassifyEndpoint:
     def test_classify_returns_503_when_model_not_loaded(self, unloaded_client, sample_kpi_window):
